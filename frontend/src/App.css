@@ -1735,3 +1735,208 @@ code {
     display: none;
   }
 }
+
+
+/* Phase 3 deployment observability */
+.deployment-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  padding: 30px 0 18px;
+}
+
+.deployment-list,
+.container-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.deployment-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(190px, 1.15fr) minmax(0, 2fr) 20px;
+  gap: 22px;
+  align-items: center;
+  padding: 18px 20px;
+  border: 1px solid #252a32;
+  border-radius: 13px;
+  background: #12151a;
+  color: inherit;
+  text-decoration: none;
+}
+
+.deployment-row:hover {
+  border-color: #343b46;
+  background: #15191f;
+}
+
+.deployment-identity {
+  display: grid;
+  gap: 11px;
+  min-width: 0;
+}
+
+.deployment-identity strong {
+  display: block;
+  overflow: hidden;
+  color: #eceef1;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.deployment-identity small,
+.container-strategy {
+  display: block;
+  margin-top: 5px;
+  color: #707986;
+  font-size: 10px;
+}
+
+.deployment-state {
+  display: inline-flex;
+  width: max-content;
+  align-items: center;
+  gap: 7px;
+  color: #9aa2ae;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.deployment-state.deployment-healthy {
+  color: #86efac;
+}
+
+.deployment-state.deployment-healthy .status-dot {
+  background: #5ee08a;
+}
+
+.deployment-state.deployment-warning {
+  color: #f7d584;
+}
+
+.deployment-state.deployment-warning .status-dot {
+  background: #f6c768;
+}
+
+.deployment-state.deployment-error {
+  color: #fda4af;
+}
+
+.deployment-state.deployment-error .status-dot {
+  background: #fb7185;
+}
+
+.deployment-row-metrics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.deployment-row-metrics > div {
+  min-width: 0;
+}
+
+.deployment-row-metrics span {
+  display: block;
+  color: #707986;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.deployment-row-metrics strong {
+  display: block;
+  margin-top: 7px;
+  overflow: hidden;
+  color: #d9dde3;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.deployment-chevron {
+  color: #59616d;
+  font-size: 17px;
+}
+
+.deployment-back {
+  margin-top: 28px;
+}
+
+.deployment-detail-hero {
+  padding-top: 19px;
+}
+
+.deployment-status-text {
+  font-size: 21px !important;
+}
+
+.container-metrics-card {
+  margin-top: 0;
+}
+
+.container-heading {
+  align-items: flex-start;
+}
+
+.container-heading h2 {
+  max-width: 650px;
+  overflow-wrap: anywhere;
+  font-size: 16px;
+}
+
+.container-state-stack {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.container-detail-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+@media (max-width: 1000px) {
+  .deployment-row {
+    grid-template-columns: 1fr 18px;
+  }
+
+  .deployment-row-metrics {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .deployment-chevron {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .container-detail-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .deployment-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .deployment-row-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .container-detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .deployment-summary-grid,
+  .container-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .deployment-row {
+    padding: 16px;
+  }
+}

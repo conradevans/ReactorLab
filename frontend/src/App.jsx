@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react"
 
 import AdminShell from "./components/AdminShell"
+import DeploymentDetailPage from "./components/DeploymentDetailPage"
+import DeploymentsPage from "./components/DeploymentsPage"
 import GuestPage from "./components/GuestPage"
 import LandingPage from "./components/LandingPage"
 import OverviewPage from "./components/OverviewPage"
@@ -30,17 +32,48 @@ export default function App() {
   if (route.screen === "guest") return <GuestPage navigate={navigate} />
 
   const pages = {
-    deployments: ["MINIDEPLOY", "Deployments", "Per-deployment and per-container CPU, RAM, network, disk, uptime, and restart metrics arrive in Phase 3."],
-    databases: ["MINIBASE", "Databases", "Database storage, activity, connections, backups, and estimated CPU and RAM arrive in Phase 4."],
-    activity: ["ACTIVITY", "Activity", "Unified MiniDeploy, MiniBase, and ReactorLab monitoring history arrives later in the monitoring build."],
+    databases: [
+      "MINIBASE",
+      "Databases",
+      "Database storage, activity, connections, backups, and estimated CPU and RAM arrive in Phase 4.",
+    ],
+    activity: [
+      "ACTIVITY",
+      "Activity",
+      "Unified MiniDeploy, MiniBase, and ReactorLab monitoring history arrives later in the monitoring build.",
+    ],
   }
 
   if (route.screen === "overview") {
-    return <AdminShell active="overview" navigate={navigate}><OverviewPage /></AdminShell>
+    return (
+      <AdminShell active="overview" navigate={navigate}>
+        <OverviewPage />
+      </AdminShell>
+    )
   }
 
   if (route.screen === "system") {
-    return <AdminShell active="system" navigate={navigate}><SystemPage /></AdminShell>
+    return (
+      <AdminShell active="system" navigate={navigate}>
+        <SystemPage />
+      </AdminShell>
+    )
+  }
+
+  if (route.screen === "deployments") {
+    return (
+      <AdminShell active="deployments" navigate={navigate}>
+        <DeploymentsPage navigate={navigate} />
+      </AdminShell>
+    )
+  }
+
+  if (route.screen === "deployment-detail") {
+    return (
+      <AdminShell active="deployments" navigate={navigate}>
+        <DeploymentDetailPage app={route.app} navigate={navigate} />
+      </AdminShell>
+    )
   }
 
   if (pages[route.screen]) {
