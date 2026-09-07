@@ -3,20 +3,29 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"os"
+	"path"
+	"path/filepath"
+	"strings"
 )
 
 type Handler struct {
-	mux *http.ServeMux
+	mux         *http.ServeMux
+	frontendDir string
 }
 
-func NewHandler() http.Handler {
-	h := &Handler{mux: http.NewServeMux()}
+func NewHandler(frontendDir string) http.Handler {
+	h := &Handler{
+		mux:         http.NewServeMux(),
+		frontendDir: frontendDir,
+	}
 
 	h.mux.HandleFunc("GET /health", h.health)
 	h.mux.HandleFunc("GET /api/v1/status", h.adminStatus)
 	h.mux.HandleFunc("GET /api/v1/guest/status", h.guestStatus)
+	h.mux.HandleFunc("GET /", h.frontend)
 
-	return h.mux
+	return h
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -51,4 +60,34 @@ func (h *Handler) guestStatus(w http.ResponseWriter, _ *http.Request) {
 		"service": "reactorlab",
 		"status":  "ok",
 	})
+}
+
+func (h *Handler) frontend(w http.ResponseWriter, r *http.Request) {
+	if strings.HasPrefix(r.URL.Path, "/api/") {
+		writeJSON(w, http.StatusNotFound, map[string]any{
+			"error": "not_found",
+		})
+		return
+	}
+
+	if h.frontendDir == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	requestPath := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
+	candidate := filepath.Join(h.frontendDir, filepath.FromSlash(requestPath))
+
+	if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+		http.ServeFile(w, r, candidate)
+		return
+	}
+
+	indexPath := filepath.Join(h.frontendDir, "index.html")
+	if _, err := os.Stat(indexPath); err != nil {
+		http.Error(w, "ReactorLab frontend is unavailable", http.StatusServiceUnavailable)
+		return
+	}
+
+	http.ServeFile(w, r, indexPath)
 }

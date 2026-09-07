@@ -12,6 +12,7 @@ import (
 
 func main() {
 	listen := flag.String("listen", "127.0.0.1:9200", "HTTP listen address")
+	frontend := flag.String("frontend", "frontend/dist", "built frontend directory")
 	flag.Parse()
 
 	host, _, err := net.SplitHostPort(*listen)
@@ -26,7 +27,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:    *listen,
-		Handler: api.NewHandler(),
+		Handler: api.NewHandler(*frontend),
 	}
 
 	fmt.Printf("ReactorLab listening on %s\n", *listen)
