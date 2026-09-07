@@ -19,6 +19,11 @@ func TestClientDatabases(t *testing.T) {
 				"id":"database_1",
 				"displayName":"MyScheduler Production",
 				"status":"ready",
+				"attachments":[{
+					"consumerType":"minideploy",
+					"consumerRef":"myscheduler",
+					"bindingName":"primary"
+				}],
 				"sizeBytes":9000627,
 				"connections":1,
 				"activeConnections":0,
@@ -61,6 +66,13 @@ func TestClientDatabases(t *testing.T) {
 		database.BackupCount != 5 {
 		t.Fatalf("database = %#v", database)
 	}
+	if len(database.Attachments) != 1 ||
+		database.Attachments[0].ConsumerType != "minideploy" ||
+		database.Attachments[0].ConsumerRef != "myscheduler" ||
+		database.Attachments[0].BindingName != "primary" {
+		t.Fatalf("attachments = %#v", database.Attachments)
+	}
+
 	if snapshot.Postgres.State != "running" || snapshot.Postgres.PIDs != 7 {
 		t.Fatalf("postgres = %#v", snapshot.Postgres)
 	}

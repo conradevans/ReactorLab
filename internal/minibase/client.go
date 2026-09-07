@@ -26,6 +26,7 @@ type Database struct {
 	ID                string       `json:"id"`
 	DisplayName       string       `json:"displayName"`
 	Status            string       `json:"status"`
+	Attachments       []Attachment `json:"attachments"`
 	SizeBytes         int64        `json:"sizeBytes"`
 	Connections       int64        `json:"connections"`
 	ActiveConnections int64        `json:"activeConnections"`
@@ -37,6 +38,12 @@ type Database struct {
 	BackupBytes       int64        `json:"backupBytes"`
 	LatestBackupAt    *time.Time   `json:"latestBackupAt,omitempty"`
 	BackupAgeSeconds  *float64     `json:"backupAgeSeconds,omitempty"`
+}
+
+type Attachment struct {
+	ConsumerType string `json:"consumerType"`
+	ConsumerRef  string `json:"consumerRef"`
+	BindingName  string `json:"bindingName"`
 }
 
 type Transactions struct {
@@ -116,6 +123,11 @@ func (c *Client) Databases(ctx context.Context) (Snapshot, error) {
 
 	if snapshot.Databases == nil {
 		snapshot.Databases = []Database{}
+	}
+	for index := range snapshot.Databases {
+		if snapshot.Databases[index].Attachments == nil {
+			snapshot.Databases[index].Attachments = []Attachment{}
+		}
 	}
 
 	return snapshot, nil

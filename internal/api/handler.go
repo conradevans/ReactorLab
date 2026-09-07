@@ -42,11 +42,7 @@ func newHandler(
 	frontendDir string,
 	miniDeploy deploymentMetricsSource,
 ) http.Handler {
-	return newHandlerWithSources(
-		frontendDir,
-		miniDeploy,
-		minibase.NewClient(minibase.DefaultBaseURL, 5*time.Second),
-	)
+	return newHandlerWithSources(frontendDir, miniDeploy, nil)
 }
 
 func newHandlerWithSources(
@@ -137,7 +133,32 @@ func (h *Handler) adminDeployments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, snapshot)
+	databaseSnapshot, relationshipsAvailable :=
+		h.databaseSnapshotForLinks(r.Context())
+
+	deployments := make(
+		[]deploymentResponse,
+		0,
+		len(snapshot.Deployments),
+	)
+	for _, deployment := range snapshot.Deployments {
+		link := unavailableDatabaseLink()
+		if relationshipsAvailable {
+			link = databaseLinkForDeployment(
+				deployment.App,
+				databaseSnapshot,
+			)
+		}
+		deployments = append(
+			deployments,
+			projectDeployment(deployment, link),
+		)
+	}
+
+	writeJSON(w, http.StatusOK, deploymentsResponse{
+		Deployments: deployments,
+		CollectedAt: snapshot.CollectedAt,
+	})
 }
 
 func (h *Handler) adminDeployment(w http.ResponseWriter, r *http.Request) {
@@ -149,7 +170,10 @@ func (h *Handler) adminDeployment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	deployment, ok := minideploy.FindDeployment(snapshot, r.PathValue("app"))
+	deployment, ok := minideploy.FindDeployment(
+		snapshot,
+		r.PathValue("app"),
+	)
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]any{
 			"error": "deployment_not_found",
@@ -157,7 +181,21 @@ func (h *Handler) adminDeployment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, deployment)
+	link := unavailableDatabaseLink()
+	if databaseSnapshot, ok := h.databaseSnapshotForLinks(
+		r.Context(),
+	); ok {
+		link = databaseLinkForDeployment(
+			deployment.App,
+			databaseSnapshot,
+		)
+	}
+
+	writeJSON(
+		w,
+		http.StatusOK,
+		projectDeployment(deployment, link),
+	)
 }
 
 func (h *Handler) adminDatabases(w http.ResponseWriter, r *http.Request) {
@@ -169,7 +207,33 @@ func (h *Handler) adminDatabases(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, snapshot)
+	deploymentSnapshot, relationshipsAvailable :=
+		h.deploymentSnapshotForLinks(r.Context())
+
+	databases := make(
+		[]databaseResponse,
+		0,
+		len(snapshot.Databases),
+	)
+	for _, database := range snapshot.Databases {
+		link := unavailableDeploymentLink()
+		if relationshipsAvailable {
+			link = deploymentLinkForDatabase(
+				database,
+				deploymentSnapshot,
+			)
+		}
+		databases = append(
+			databases,
+			projectDatabase(database, link),
+		)
+	}
+
+	writeJSON(w, http.StatusOK, databasesResponse{
+		Databases:   databases,
+		Postgres:    snapshot.Postgres,
+		CollectedAt: snapshot.CollectedAt,
+	})
 }
 
 func (h *Handler) adminDatabase(w http.ResponseWriter, r *http.Request) {
@@ -181,7 +245,10 @@ func (h *Handler) adminDatabase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	database, ok := minibase.FindDatabase(snapshot, r.PathValue("id"))
+	database, ok := minibase.FindDatabase(
+		snapshot,
+		r.PathValue("id"),
+	)
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]any{
 			"error": "database_not_found",
@@ -189,7 +256,21 @@ func (h *Handler) adminDatabase(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, database)
+	link := unavailableDeploymentLink()
+	if deploymentSnapshot, ok := h.deploymentSnapshotForLinks(
+		r.Context(),
+	); ok {
+		link = deploymentLinkForDatabase(
+			database,
+			deploymentSnapshot,
+		)
+	}
+
+	writeJSON(
+		w,
+		http.StatusOK,
+		projectDatabase(database, link),
+	)
 }
 
 func (h *Handler) frontend(w http.ResponseWriter, r *http.Request) {
@@ -205,8 +286,14 @@ func (h *Handler) frontend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	requestPath := strings.TrimPrefix(path.Clean("/"+r.URL.Path), "/")
-	candidate := filepath.Join(h.frontendDir, filepath.FromSlash(requestPath))
+	requestPath := strings.TrimPrefix(
+		path.Clean("/"+r.URL.Path),
+		"/",
+	)
+	candidate := filepath.Join(
+		h.frontendDir,
+		filepath.FromSlash(requestPath),
+	)
 
 	if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
 		http.ServeFile(w, r, candidate)
@@ -215,7 +302,11 @@ func (h *Handler) frontend(w http.ResponseWriter, r *http.Request) {
 
 	indexPath := filepath.Join(h.frontendDir, "index.html")
 	if _, err := os.Stat(indexPath); err != nil {
-		http.Error(w, "ReactorLab frontend is unavailable", http.StatusServiceUnavailable)
+		http.Error(
+			w,
+			"ReactorLab frontend is unavailable",
+			http.StatusServiceUnavailable,
+		)
 		return
 	}
 
