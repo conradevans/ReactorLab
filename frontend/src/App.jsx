@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react"
 
 import AdminShell from "./components/AdminShell"
+import DatabaseDetailPage from "./components/DatabaseDetailPage"
+import DatabasesPage from "./components/DatabasesPage"
 import DeploymentDetailPage from "./components/DeploymentDetailPage"
 import DeploymentsPage from "./components/DeploymentsPage"
 import GuestPage from "./components/GuestPage"
@@ -32,11 +34,6 @@ export default function App() {
   if (route.screen === "guest") return <GuestPage navigate={navigate} />
 
   const pages = {
-    databases: [
-      "MINIBASE",
-      "Databases",
-      "Database storage, activity, connections, backups, and estimated CPU and RAM arrive in Phase 4.",
-    ],
     activity: [
       "ACTIVITY",
       "Activity",
@@ -72,6 +69,22 @@ export default function App() {
     return (
       <AdminShell active="deployments" navigate={navigate}>
         <DeploymentDetailPage app={route.app} navigate={navigate} />
+      </AdminShell>
+    )
+  }
+
+  if (route.screen === "databases") {
+    return (
+      <AdminShell active="databases" navigate={navigate}>
+        <DatabasesPage navigate={navigate} />
+      </AdminShell>
+    )
+  }
+
+  if (route.screen === "database-detail") {
+    return (
+      <AdminShell active="databases" navigate={navigate}>
+        <DatabaseDetailPage id={route.id} navigate={navigate} />
       </AdminShell>
     )
   }

@@ -21,6 +21,22 @@ export function resolveRoute(pathname) {
   }
 
   if (pathname === "/admin/databases") return { screen: "databases" }
+
+  const databasePrefix = "/admin/databases/"
+  if (pathname.startsWith(databasePrefix)) {
+    const encodedID = pathname.slice(databasePrefix.length)
+    if (encodedID && !encodedID.includes("/")) {
+      try {
+        return {
+          screen: "database-detail",
+          id: decodeURIComponent(encodedID),
+        }
+      } catch {
+        return { screen: "not-found" }
+      }
+    }
+  }
+
   if (pathname === "/admin/activity") return { screen: "activity" }
   return { screen: "not-found" }
 }

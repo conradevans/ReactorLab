@@ -1940,3 +1940,65 @@ code {
     padding: 16px;
   }
 }
+
+
+/* Phase 4 database observability */
+.database-postgres-card {
+  margin-bottom: 18px;
+}
+
+.database-postgres-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.database-primary small {
+  color: #707986;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.database-shared-note {
+  margin: 15px 0 0;
+  color: #707986;
+  font-size: 10px;
+  line-height: 1.65;
+}
+
+.database-observability-back {
+  margin-top: 28px;
+}
+
+.database-detail-hero {
+  padding-top: 19px;
+}
+
+.database-section-grid {
+  align-items: start;
+}
+
+.database-detail-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.database-detail-note {
+  margin-top: 18px;
+}
+
+@media (max-width: 1000px) {
+  .database-postgres-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .database-postgres-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .database-postgres-grid,
+  .database-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
