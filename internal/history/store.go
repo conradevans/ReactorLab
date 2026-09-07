@@ -62,13 +62,14 @@ type Batch struct {
 }
 
 type ActivityEvent struct {
-	OccurredAt  time.Time
-	Source      string
-	Kind        string
-	Severity    string
-	Subject     string
-	Message     string
-	Fingerprint string
+	ID          int64     `json:"id"`
+	OccurredAt  time.Time `json:"occurredAt"`
+	Source      string    `json:"source"`
+	Kind        string    `json:"kind"`
+	Severity    string    `json:"severity"`
+	Subject     string    `json:"subject"`
+	Message     string    `json:"message"`
+	Fingerprint string    `json:"-"`
 }
 
 type Counts struct {
@@ -374,6 +375,103 @@ INSERT INTO activity_events (
 		return fmt.Errorf("insert activity event: %w", err)
 	}
 	return nil
+}
+
+func (s *Store) LatestActivity(
+	ctx context.Context,
+	fingerprint string,
+) (ActivityEvent, bool, error) {
+	var event ActivityEvent
+	var occurredAt int64
+	err := s.db.QueryRowContext(ctx, `
+SELECT
+	id,
+	occurred_at,
+	source,
+	kind,
+	severity,
+	subject,
+	message,
+	fingerprint
+FROM activity_events
+WHERE fingerprint = ?
+ORDER BY occurred_at DESC, id DESC
+LIMIT 1`,
+		fingerprint,
+	).Scan(
+		&event.ID,
+		&occurredAt,
+		&event.Source,
+		&event.Kind,
+		&event.Severity,
+		&event.Subject,
+		&event.Message,
+		&event.Fingerprint,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ActivityEvent{}, false, nil
+	}
+	if err != nil {
+		return ActivityEvent{}, false, fmt.Errorf("read latest activity event: %w", err)
+	}
+	event.OccurredAt = time.Unix(occurredAt, 0).UTC()
+	return event, true, nil
+}
+
+func (s *Store) ListActivity(
+	ctx context.Context,
+	limit int,
+) ([]ActivityEvent, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 200 {
+		limit = 200
+	}
+
+	rows, err := s.db.QueryContext(ctx, `
+SELECT
+	id,
+	occurred_at,
+	source,
+	kind,
+	severity,
+	subject,
+	message,
+	fingerprint
+FROM activity_events
+ORDER BY occurred_at DESC, id DESC
+LIMIT ?`,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query activity events: %w", err)
+	}
+	defer rows.Close()
+
+	events := make([]ActivityEvent, 0)
+	for rows.Next() {
+		var event ActivityEvent
+		var occurredAt int64
+		if err := rows.Scan(
+			&event.ID,
+			&occurredAt,
+			&event.Source,
+			&event.Kind,
+			&event.Severity,
+			&event.Subject,
+			&event.Message,
+			&event.Fingerprint,
+		); err != nil {
+			return nil, fmt.Errorf("scan activity event: %w", err)
+		}
+		event.OccurredAt = time.Unix(occurredAt, 0).UTC()
+		events = append(events, event)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate activity events: %w", err)
+	}
+	return events, nil
 }
 
 func (s *Store) PruneBefore(ctx context.Context, cutoff time.Time) error {

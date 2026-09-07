@@ -19,6 +19,8 @@ const (
 
 type historyStore interface {
 	InsertBatch(context.Context, history.Batch) error
+	AppendActivity(context.Context, history.ActivityEvent) error
+	LatestActivity(context.Context, string) (history.ActivityEvent, bool, error)
 	PruneBefore(context.Context, time.Time) error
 }
 
@@ -139,6 +141,15 @@ func (s *Sampler) sampleOnce(ctx context.Context) error {
 
 	if err := s.store.InsertBatch(ctx, batch); err != nil {
 		return err
+	}
+
+	if err := s.evaluateWarnings(
+		ctx,
+		batch,
+		deploymentsAvailable,
+		databasesAvailable,
+	); err != nil && ctx.Err() == nil {
+		log.Printf("ReactorLab warning evaluation failed: %v", err)
 	}
 
 	cutoff := s.now().UTC().Add(-s.retention)

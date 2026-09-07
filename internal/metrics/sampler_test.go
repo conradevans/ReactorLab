@@ -13,13 +13,34 @@ import (
 )
 
 type fakeStore struct {
-	batches []history.Batch
-	prunes  []time.Time
+	batches  []history.Batch
+	prunes   []time.Time
+	activity []history.ActivityEvent
 }
 
 func (f *fakeStore) InsertBatch(_ context.Context, batch history.Batch) error {
 	f.batches = append(f.batches, batch)
 	return nil
+}
+
+func (f *fakeStore) AppendActivity(
+	_ context.Context,
+	event history.ActivityEvent,
+) error {
+	f.activity = append(f.activity, event)
+	return nil
+}
+
+func (f *fakeStore) LatestActivity(
+	_ context.Context,
+	fingerprint string,
+) (history.ActivityEvent, bool, error) {
+	for index := len(f.activity) - 1; index >= 0; index-- {
+		if f.activity[index].Fingerprint == fingerprint {
+			return f.activity[index], true, nil
+		}
+	}
+	return history.ActivityEvent{}, false, nil
 }
 
 func (f *fakeStore) PruneBefore(_ context.Context, cutoff time.Time) error {

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/conradevans/ReactorLab/internal/history"
 	"github.com/conradevans/ReactorLab/internal/minibase"
 	"github.com/conradevans/ReactorLab/internal/minideploy"
 	reactorsystem "github.com/conradevans/ReactorLab/internal/system"
@@ -23,18 +24,50 @@ type databaseMetricsSource interface {
 	Databases(context.Context) (minibase.Snapshot, error)
 }
 
+type activitySource interface {
+	ListActivity(context.Context, int) ([]history.ActivityEvent, error)
+}
+
+type activityEventResponse struct {
+	ID         int64     `json:"id"`
+	OccurredAt time.Time `json:"occurredAt"`
+	Source     string    `json:"source"`
+	Kind       string    `json:"kind"`
+	Severity   string    `json:"severity"`
+	Subject    string    `json:"subject"`
+	Message    string    `json:"message"`
+}
+
+type activityResponse struct {
+	Events []activityEventResponse `json:"events"`
+}
+
 type Handler struct {
 	mux         *http.ServeMux
 	frontendDir string
 	miniDeploy  deploymentMetricsSource
 	miniBase    databaseMetricsSource
+	activity    activitySource
 }
 
 func NewHandler(frontendDir string) http.Handler {
-	return newHandlerWithSources(
+	return newHandlerWithAllSources(
 		frontendDir,
 		minideploy.NewClient(minideploy.DefaultBaseURL, 5*time.Second),
 		minibase.NewClient(minibase.DefaultBaseURL, 5*time.Second),
+		nil,
+	)
+}
+
+func NewHandlerWithHistory(
+	frontendDir string,
+	activity activitySource,
+) http.Handler {
+	return newHandlerWithAllSources(
+		frontendDir,
+		minideploy.NewClient(minideploy.DefaultBaseURL, 5*time.Second),
+		minibase.NewClient(minibase.DefaultBaseURL, 5*time.Second),
+		activity,
 	)
 }
 
@@ -50,11 +83,26 @@ func newHandlerWithSources(
 	miniDeploy deploymentMetricsSource,
 	miniBase databaseMetricsSource,
 ) http.Handler {
+	return newHandlerWithAllSources(
+		frontendDir,
+		miniDeploy,
+		miniBase,
+		nil,
+	)
+}
+
+func newHandlerWithAllSources(
+	frontendDir string,
+	miniDeploy deploymentMetricsSource,
+	miniBase databaseMetricsSource,
+	activity activitySource,
+) http.Handler {
 	h := &Handler{
 		mux:         http.NewServeMux(),
 		frontendDir: frontendDir,
 		miniDeploy:  miniDeploy,
 		miniBase:    miniBase,
+		activity:    activity,
 	}
 
 	h.mux.HandleFunc("GET /health", h.health)
@@ -65,6 +113,7 @@ func newHandlerWithSources(
 	h.mux.HandleFunc("GET /api/v1/deployments/{app}", h.adminDeployment)
 	h.mux.HandleFunc("GET /api/v1/databases", h.adminDatabases)
 	h.mux.HandleFunc("GET /api/v1/databases/{id}", h.adminDatabase)
+	h.mux.HandleFunc("GET /api/v1/activity", h.adminActivity)
 	h.mux.HandleFunc("GET /", h.frontend)
 
 	return h
@@ -122,6 +171,38 @@ func (h *Handler) adminSystem(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, metrics)
+}
+
+func (h *Handler) adminActivity(w http.ResponseWriter, r *http.Request) {
+	if h.activity == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+			"error": "activity_unavailable",
+		})
+		return
+	}
+
+	events, err := h.activity.ListActivity(r.Context(), 100)
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+			"error": "activity_unavailable",
+		})
+		return
+	}
+
+	response := make([]activityEventResponse, 0, len(events))
+	for _, event := range events {
+		response = append(response, activityEventResponse{
+			ID:         event.ID,
+			OccurredAt: event.OccurredAt,
+			Source:     event.Source,
+			Kind:       event.Kind,
+			Severity:   event.Severity,
+			Subject:    event.Subject,
+			Message:    event.Message,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, activityResponse{Events: response})
 }
 
 func (h *Handler) adminDeployments(w http.ResponseWriter, r *http.Request) {

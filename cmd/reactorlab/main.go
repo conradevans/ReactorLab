@@ -64,7 +64,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:    *listen,
-		Handler: api.NewHandler(*frontend),
+		Handler: api.NewHandlerWithHistory(*frontend, historyStore),
 	}
 
 	serverErrors := make(chan error, 1)
