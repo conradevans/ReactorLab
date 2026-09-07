@@ -7,6 +7,8 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+
+	reactorsystem "github.com/conradevans/ReactorLab/internal/system"
 )
 
 type Handler struct {
@@ -23,6 +25,8 @@ func NewHandler(frontendDir string) http.Handler {
 	h.mux.HandleFunc("GET /health", h.health)
 	h.mux.HandleFunc("GET /api/v1/status", h.adminStatus)
 	h.mux.HandleFunc("GET /api/v1/guest/status", h.guestStatus)
+	h.mux.HandleFunc("GET /api/v1/system", h.adminSystem)
+	h.mux.HandleFunc("GET /api/v1/guest/system", h.guestSystem)
 	h.mux.HandleFunc("GET /", h.frontend)
 
 	return h
@@ -59,6 +63,37 @@ func (h *Handler) guestStatus(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"service": "reactorlab",
 		"status":  "ok",
+	})
+}
+
+func (h *Handler) adminSystem(w http.ResponseWriter, _ *http.Request) {
+	metrics, err := reactorsystem.Collect()
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+			"error": "system_metrics_unavailable",
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, metrics)
+}
+
+func (h *Handler) guestSystem(w http.ResponseWriter, _ *http.Request) {
+	metrics, err := reactorsystem.Collect()
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+			"error": "system_metrics_unavailable",
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":             "ok",
+		"cpuPercent":         metrics.CPU.UsagePercent,
+		"memoryPercent":      metrics.Memory.UsagePercent,
+		"diskPercent":        metrics.Disk.UsagePercent,
+		"temperatureCelsius": metrics.Temperature.Celsius,
+		"uptimeSeconds":      metrics.UptimeSeconds,
 	})
 }
 
