@@ -4,6 +4,10 @@ import {
   deploymentStatusLabel,
   summarizeDeployment,
 } from "../deploymentMetrics"
+import {
+  relationshipStateClass,
+  relationshipStateLabel,
+} from "../relationshipMetrics"
 import usePollingJSON from "../usePollingJSON"
 
 function Metric({ label, value, detail }) {
@@ -16,14 +20,28 @@ function Metric({ label, value, detail }) {
   )
 }
 
+function databaseRelationshipMessage(state) {
+  if (state === "detached") return "This deployment has no MiniBase database attached."
+  if (state === "unavailable") return "MiniBase relationship data is currently unavailable."
+  if (state === "conflict") return "Multiple database relationships were detected for this deployment."
+  return "Database relationship state is unavailable."
+}
+
 export default function DeploymentDetailPage({ app, navigate }) {
   const path = `/api/v1/deployments/${encodeURIComponent(app)}`
   const { data: deployment, error, loading } = usePollingJSON(path)
   const summary = summarizeDeployment(deployment)
+  const databaseLink = deployment?.database
 
   function back(event) {
     event.preventDefault()
     navigate("/admin/deployments")
+  }
+
+  function openDatabase(event) {
+    event.preventDefault()
+    if (databaseLink?.state !== "linked" || !databaseLink.id) return
+    navigate(`/admin/databases/${encodeURIComponent(databaseLink.id)}`)
   }
 
   return (
@@ -74,6 +92,43 @@ export default function DeploymentDetailPage({ app, navigate }) {
           <strong>{loading ? "—" : summary.restarts}</strong>
           <small>{summary.containers} recorded containers</small>
         </article>
+      </section>
+
+      <section className="section-card relationship-card">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">MINIBASE</p>
+            <h2>Database relationship</h2>
+          </div>
+          <span
+            className={`relationship-badge ${relationshipStateClass(
+              databaseLink?.state,
+            )}`}
+          >
+            {loading ? "Loading" : relationshipStateLabel(databaseLink?.state)}
+          </span>
+        </div>
+
+        {databaseLink?.state === "linked" ? (
+          <a
+            className="relationship-link"
+            href={`/admin/databases/${encodeURIComponent(databaseLink.id)}`}
+            onClick={openDatabase}
+          >
+            <div className="relationship-link-primary">
+              <span>Database</span>
+              <strong>{databaseLink.displayName}</strong>
+              <small>{databaseLink.status || "unknown status"} · MiniBase</small>
+            </div>
+            <span className="relationship-arrow" aria-hidden="true">→</span>
+          </a>
+        ) : (
+          <p className="relationship-empty">
+            {loading
+              ? "Loading database relationship…"
+              : databaseRelationshipMessage(databaseLink?.state)}
+          </p>
+        )}
       </section>
 
       <section className="container-stack">

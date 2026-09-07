@@ -5,6 +5,10 @@ import {
   formatBackupAge,
   summarizeDatabases,
 } from "../databaseMetrics"
+import {
+  relationshipStateClass,
+  relationshipStateLabel,
+} from "../relationshipMetrics"
 import usePollingJSON from "../usePollingJSON"
 
 function goToDatabase(navigate, id) {
@@ -116,6 +120,16 @@ export default function DatabasesPage({ navigate }) {
             <div className="database-primary">
               <strong>{database.displayName}</strong>
               <small>{formatBackupAge(database.backupAgeSeconds)}</small>
+              <small
+                className={`relationship-inline ${relationshipStateClass(
+                  database.deployment?.state,
+                )}`}
+              >
+                Deployment ·{" "}
+                {database.deployment?.state === "linked"
+                  ? database.deployment.app
+                  : relationshipStateLabel(database.deployment?.state)}
+              </small>
             </div>
 
             <span className={`status-badge ${databaseStatusClass(database.status)}`}>

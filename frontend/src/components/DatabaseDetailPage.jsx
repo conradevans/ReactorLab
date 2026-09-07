@@ -5,6 +5,10 @@ import {
   databaseStatusLabel,
   formatBackupAge,
 } from "../databaseMetrics"
+import {
+  relationshipStateClass,
+  relationshipStateLabel,
+} from "../relationshipMetrics"
 import usePollingJSON from "../usePollingJSON"
 
 function Metric({ label, value, detail }) {
@@ -26,14 +30,33 @@ function formatTimestamp(value) {
   return date.toLocaleString()
 }
 
+function deploymentRelationshipMessage(link) {
+  if (link?.state === "detached") return "This database is not attached to a MiniDeploy deployment."
+  if (link?.state === "unavailable") return "MiniDeploy relationship data is currently unavailable."
+  if (link?.state === "unresolved") {
+    return link.app
+      ? `${link.app} is attached in MiniBase, but MiniDeploy did not return that deployment.`
+      : "The attached MiniDeploy deployment could not be resolved."
+  }
+  if (link?.state === "conflict") return "Multiple deployment relationships were detected for this database."
+  return "Deployment relationship state is unavailable."
+}
+
 export default function DatabaseDetailPage({ id, navigate }) {
   const path = `/api/v1/databases/${encodeURIComponent(id)}`
   const { data: database, error, loading } = usePollingJSON(path)
   const cachePercent = cacheHitPercent(database)
+  const deploymentLink = database?.deployment
 
   function back(event) {
     event.preventDefault()
     navigate("/admin/databases")
+  }
+
+  function openDeployment(event) {
+    event.preventDefault()
+    if (deploymentLink?.state !== "linked" || !deploymentLink.app) return
+    navigate(`/admin/deployments/${encodeURIComponent(deploymentLink.app)}`)
   }
 
   return (
@@ -90,6 +113,46 @@ export default function DatabaseDetailPage({ id, navigate }) {
           <strong>{loading ? "—" : (database?.backupCount ?? "—")}</strong>
           <small>{loading ? "—" : `${formatBytes(database?.backupBytes)} stored`}</small>
         </article>
+      </section>
+
+      <section className="section-card relationship-card">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">MINIDEPLOY</p>
+            <h2>Deployment relationship</h2>
+          </div>
+          <span
+            className={`relationship-badge ${relationshipStateClass(
+              deploymentLink?.state,
+            )}`}
+          >
+            {loading ? "Loading" : relationshipStateLabel(deploymentLink?.state)}
+          </span>
+        </div>
+
+        {deploymentLink?.state === "linked" ? (
+          <a
+            className="relationship-link"
+            href={`/admin/deployments/${encodeURIComponent(deploymentLink.app)}`}
+            onClick={openDeployment}
+          >
+            <div className="relationship-link-primary">
+              <span>Deployment</span>
+              <strong>{deploymentLink.app}</strong>
+              <small>
+                {deploymentLink.strategy || "unknown strategy"} ·{" "}
+                {deploymentLink.status || "unknown status"}
+              </small>
+            </div>
+            <span className="relationship-arrow" aria-hidden="true">→</span>
+          </a>
+        ) : (
+          <p className="relationship-empty">
+            {loading
+              ? "Loading deployment relationship…"
+              : deploymentRelationshipMessage(deploymentLink)}
+          </p>
+        )}
       </section>
 
       <section className="system-section-grid database-section-grid">

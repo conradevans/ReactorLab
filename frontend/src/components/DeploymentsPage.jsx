@@ -4,6 +4,10 @@ import {
   deploymentStatusLabel,
   summarizeDeployment,
 } from "../deploymentMetrics"
+import {
+  relationshipStateClass,
+  relationshipStateLabel,
+} from "../relationshipMetrics"
 import usePollingJSON from "../usePollingJSON"
 
 function goToDeployment(navigate, app) {
@@ -92,6 +96,16 @@ export default function DeploymentsPage({ navigate }) {
                 <div>
                   <strong>{deployment.app}</strong>
                   <small>{deployment.strategy || "unknown strategy"}</small>
+                  <small
+                    className={`relationship-inline ${relationshipStateClass(
+                      deployment.database?.state,
+                    )}`}
+                  >
+                    Database ·{" "}
+                    {deployment.database?.state === "linked"
+                      ? deployment.database.displayName
+                      : relationshipStateLabel(deployment.database?.state)}
+                  </small>
                 </div>
                 <span className={`deployment-state ${statusClass}`}>
                   <span className="status-dot" aria-hidden="true" />
