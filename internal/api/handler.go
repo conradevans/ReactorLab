@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/conradevans/ReactorLab/internal/minibase"
 	"github.com/conradevans/ReactorLab/internal/minideploy"
 	reactorsystem "github.com/conradevans/ReactorLab/internal/system"
 )
@@ -18,16 +19,22 @@ type deploymentMetricsSource interface {
 	Deployments(context.Context) (minideploy.Snapshot, error)
 }
 
+type databaseMetricsSource interface {
+	Databases(context.Context) (minibase.Snapshot, error)
+}
+
 type Handler struct {
 	mux         *http.ServeMux
 	frontendDir string
 	miniDeploy  deploymentMetricsSource
+	miniBase    databaseMetricsSource
 }
 
 func NewHandler(frontendDir string) http.Handler {
-	return newHandler(
+	return newHandlerWithSources(
 		frontendDir,
 		minideploy.NewClient(minideploy.DefaultBaseURL, 5*time.Second),
+		minibase.NewClient(minibase.DefaultBaseURL, 5*time.Second),
 	)
 }
 
@@ -35,10 +42,23 @@ func newHandler(
 	frontendDir string,
 	miniDeploy deploymentMetricsSource,
 ) http.Handler {
+	return newHandlerWithSources(
+		frontendDir,
+		miniDeploy,
+		minibase.NewClient(minibase.DefaultBaseURL, 5*time.Second),
+	)
+}
+
+func newHandlerWithSources(
+	frontendDir string,
+	miniDeploy deploymentMetricsSource,
+	miniBase databaseMetricsSource,
+) http.Handler {
 	h := &Handler{
 		mux:         http.NewServeMux(),
 		frontendDir: frontendDir,
 		miniDeploy:  miniDeploy,
+		miniBase:    miniBase,
 	}
 
 	h.mux.HandleFunc("GET /health", h.health)
@@ -47,6 +67,8 @@ func newHandler(
 	h.mux.HandleFunc("GET /api/v1/system", h.adminSystem)
 	h.mux.HandleFunc("GET /api/v1/deployments", h.adminDeployments)
 	h.mux.HandleFunc("GET /api/v1/deployments/{app}", h.adminDeployment)
+	h.mux.HandleFunc("GET /api/v1/databases", h.adminDatabases)
+	h.mux.HandleFunc("GET /api/v1/databases/{id}", h.adminDatabase)
 	h.mux.HandleFunc("GET /", h.frontend)
 
 	return h
@@ -136,6 +158,38 @@ func (h *Handler) adminDeployment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, deployment)
+}
+
+func (h *Handler) adminDatabases(w http.ResponseWriter, r *http.Request) {
+	snapshot, err := h.miniBase.Databases(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+			"error": "database_metrics_unavailable",
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, snapshot)
+}
+
+func (h *Handler) adminDatabase(w http.ResponseWriter, r *http.Request) {
+	snapshot, err := h.miniBase.Databases(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+			"error": "database_metrics_unavailable",
+		})
+		return
+	}
+
+	database, ok := minibase.FindDatabase(snapshot, r.PathValue("id"))
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]any{
+			"error": "database_not_found",
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, database)
 }
 
 func (h *Handler) frontend(w http.ResponseWriter, r *http.Request) {
