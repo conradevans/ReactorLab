@@ -18,8 +18,18 @@ import (
 	"github.com/conradevans/ReactorLab/internal/metrics"
 )
 
+type serverResult struct {
+	name string
+	err  error
+}
+
 func main() {
-	listen := flag.String("listen", "127.0.0.1:9200", "HTTP listen address")
+	listen := flag.String("listen", "127.0.0.1:9200", "private HTTP listen address")
+	publicListen := flag.String(
+		"public-listen",
+		"127.0.0.1:9203",
+		"public guest HTTP listen address",
+	)
 	frontend := flag.String("frontend", "frontend/dist", "built frontend directory")
 	historyPath := flag.String(
 		"history",
@@ -28,14 +38,10 @@ func main() {
 	)
 	flag.Parse()
 
-	host, _, err := net.SplitHostPort(*listen)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	ip := net.ParseIP(host)
-	if ip == nil || !ip.IsLoopback() {
-		log.Fatal("ReactorLab private listener must use a loopback address")
+	requireLoopback("private", *listen)
+	requireLoopback("public", *publicListen)
+	if *listen == *publicListen {
+		log.Fatal("ReactorLab private and public listeners must be different")
 	}
 
 	historyStore, err := history.Open(*historyPath)
@@ -62,26 +68,44 @@ func main() {
 		sampler.Run(runContext)
 	}()
 
-	server := &http.Server{
-		Addr:    *listen,
-		Handler: api.NewHandlerWithHistory(*frontend, historyStore),
+	servers := []struct {
+		name   string
+		server *http.Server
+	}{
+		{
+			name: "private",
+			server: &http.Server{
+				Addr:    *listen,
+				Handler: api.NewHandlerWithHistory(*frontend, historyStore),
+			},
+		},
+		{
+			name: "public",
+			server: &http.Server{
+				Addr:    *publicListen,
+				Handler: api.NewPublicHandler(*frontend),
+			},
+		},
 	}
 
-	serverErrors := make(chan error, 1)
-	go func() {
-		fmt.Printf("ReactorLab listening on %s\n", *listen)
-		serverErrors <- server.ListenAndServe()
-	}()
+	serverResults := make(chan serverResult, len(servers))
+	for _, item := range servers {
+		item := item
+		go func() {
+			fmt.Printf("ReactorLab %s listener on %s\n", item.name, item.server.Addr)
+			serverResults <- serverResult{
+				name: item.name,
+				err:  item.server.ListenAndServe(),
+			}
+		}()
+	}
 
-	serverAlreadyStopped := false
-
+	resultsSeen := 0
 	select {
 	case <-runContext.Done():
-	case err := <-serverErrors:
-		serverAlreadyStopped = true
-		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Printf("ReactorLab HTTP server stopped: %v", err)
-		}
+	case result := <-serverResults:
+		resultsSeen = 1
+		logServerResult(result)
 		stop()
 	}
 
@@ -91,18 +115,35 @@ func main() {
 	)
 	defer cancelShutdown()
 
-	if !serverAlreadyStopped {
-		if err := server.Shutdown(shutdownContext); err != nil {
-			log.Printf("ReactorLab HTTP shutdown: %v", err)
+	for _, item := range servers {
+		if err := item.server.Shutdown(shutdownContext); err != nil {
+			log.Printf("ReactorLab %s HTTP shutdown: %v", item.name, err)
 		}
 	}
 
 	stop()
 	<-samplerDone
 
-	if !serverAlreadyStopped {
-		if err := <-serverErrors; err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Printf("ReactorLab HTTP server stopped: %v", err)
-		}
+	for resultsSeen < len(servers) {
+		logServerResult(<-serverResults)
+		resultsSeen++
+	}
+}
+
+func requireLoopback(name, address string) {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		log.Fatalf("invalid ReactorLab %s listener: %v", name, err)
+	}
+
+	ip := net.ParseIP(host)
+	if ip == nil || !ip.IsLoopback() {
+		log.Fatalf("ReactorLab %s listener must use a loopback address", name)
+	}
+}
+
+func logServerResult(result serverResult) {
+	if result.err != nil && !errors.Is(result.err, http.ErrServerClosed) {
+		log.Printf("ReactorLab %s HTTP server stopped: %v", result.name, result.err)
 	}
 }

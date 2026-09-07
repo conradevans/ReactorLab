@@ -27,7 +27,7 @@ export default function LandingPage({ navigate }) {
             </p>
 
             <div className="hero-actions">
-              <a className="button primary" href="/admin" onClick={go("/admin")}>
+              <a className="button primary" href="/admin">
                 Open administrator
               </a>
               <a className="button secondary" href="/guest" onClick={go("/guest")}>
