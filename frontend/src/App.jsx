@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 
+import ActivityPage from "./components/ActivityPage"
 import AdminShell from "./components/AdminShell"
 import DatabaseDetailPage from "./components/DatabaseDetailPage"
 import DatabasesPage from "./components/DatabasesPage"
@@ -8,7 +9,6 @@ import DeploymentsPage from "./components/DeploymentsPage"
 import GuestPage from "./components/GuestPage"
 import LandingPage from "./components/LandingPage"
 import OverviewPage from "./components/OverviewPage"
-import PlaceholderPage from "./components/PlaceholderPage"
 import SystemPage from "./components/SystemPage"
 import { resolveRoute } from "./routing"
 
@@ -33,12 +33,12 @@ export default function App() {
   if (route.screen === "landing") return <LandingPage navigate={navigate} />
   if (route.screen === "guest") return <GuestPage navigate={navigate} />
 
-  const pages = {
-    activity: [
-      "ACTIVITY",
-      "Activity",
-      "Unified MiniDeploy, MiniBase, and ReactorLab monitoring history arrives later in the monitoring build.",
-    ],
+  if (route.screen === "activity") {
+    return (
+      <AdminShell active="activity" navigate={navigate}>
+        <ActivityPage />
+      </AdminShell>
+    )
   }
 
   if (route.screen === "overview") {
@@ -85,15 +85,6 @@ export default function App() {
     return (
       <AdminShell active="databases" navigate={navigate}>
         <DatabaseDetailPage id={route.id} navigate={navigate} />
-      </AdminShell>
-    )
-  }
-
-  if (pages[route.screen]) {
-    const [eyebrow, title, copy] = pages[route.screen]
-    return (
-      <AdminShell active={route.screen} navigate={navigate}>
-        <PlaceholderPage eyebrow={eyebrow} title={title} copy={copy} />
       </AdminShell>
     )
   }

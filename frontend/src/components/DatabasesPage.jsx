@@ -99,6 +99,14 @@ export default function DatabasesPage({ navigate }) {
             <strong>{loading ? "—" : formatBytes(postgres?.networkTxBytes)}</strong>
           </div>
           <div className="metric-detail">
+            <span>Block read</span>
+            <strong>{loading ? "—" : formatBytes(postgres?.blockReadBytes)}</strong>
+          </div>
+          <div className="metric-detail">
+            <span>Block write</span>
+            <strong>{loading ? "—" : formatBytes(postgres?.blockWriteBytes)}</strong>
+          </div>
+          <div className="metric-detail">
             <span>PIDs</span>
             <strong>{loading ? "—" : (postgres?.pids ?? "—")}</strong>
           </div>
