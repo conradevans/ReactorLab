@@ -1,31 +1,52 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/conradevans/ReactorLab/internal/minideploy"
 	reactorsystem "github.com/conradevans/ReactorLab/internal/system"
 )
+
+type deploymentMetricsSource interface {
+	Deployments(context.Context) (minideploy.Snapshot, error)
+}
 
 type Handler struct {
 	mux         *http.ServeMux
 	frontendDir string
+	miniDeploy  deploymentMetricsSource
 }
 
 func NewHandler(frontendDir string) http.Handler {
+	return newHandler(
+		frontendDir,
+		minideploy.NewClient(minideploy.DefaultBaseURL, 5*time.Second),
+	)
+}
+
+func newHandler(
+	frontendDir string,
+	miniDeploy deploymentMetricsSource,
+) http.Handler {
 	h := &Handler{
 		mux:         http.NewServeMux(),
 		frontendDir: frontendDir,
+		miniDeploy:  miniDeploy,
 	}
 
 	h.mux.HandleFunc("GET /health", h.health)
 	h.mux.HandleFunc("GET /api/v1/status", h.adminStatus)
 	h.mux.HandleFunc("GET /api/v1/guest/status", h.guestStatus)
 	h.mux.HandleFunc("GET /api/v1/system", h.adminSystem)
+	h.mux.HandleFunc("GET /api/v1/deployments", h.adminDeployments)
+	h.mux.HandleFunc("GET /api/v1/deployments/{app}", h.adminDeployment)
 	h.mux.HandleFunc("GET /", h.frontend)
 
 	return h
@@ -83,6 +104,38 @@ func (h *Handler) adminSystem(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, metrics)
+}
+
+func (h *Handler) adminDeployments(w http.ResponseWriter, r *http.Request) {
+	snapshot, err := h.miniDeploy.Deployments(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+			"error": "deployment_metrics_unavailable",
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, snapshot)
+}
+
+func (h *Handler) adminDeployment(w http.ResponseWriter, r *http.Request) {
+	snapshot, err := h.miniDeploy.Deployments(r.Context())
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
+			"error": "deployment_metrics_unavailable",
+		})
+		return
+	}
+
+	deployment, ok := minideploy.FindDeployment(snapshot, r.PathValue("app"))
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]any{
+			"error": "deployment_not_found",
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, deployment)
 }
 
 func (h *Handler) frontend(w http.ResponseWriter, r *http.Request) {
