@@ -1,122 +1,52 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import { useCallback, useEffect, useState } from "react"
 
-function App() {
-  const [count, setCount] = useState(0)
+import AdminShell from "./components/AdminShell"
+import GuestPage from "./components/GuestPage"
+import LandingPage from "./components/LandingPage"
+import OverviewPage from "./components/OverviewPage"
+import PlaceholderPage from "./components/PlaceholderPage"
+import { resolveRoute } from "./routing"
 
-  return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+import "./App.css"
 
-      <div className="ticks"></div>
+export default function App() {
+  const [pathname, setPathname] = useState(() => window.location.pathname)
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+  useEffect(() => {
+    const handler = () => setPathname(window.location.pathname)
+    window.addEventListener("popstate", handler)
+    return () => window.removeEventListener("popstate", handler)
+  }, [])
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+  const navigate = useCallback((path) => {
+    window.history.pushState({}, "", path)
+    setPathname(path)
+  }, [])
+
+  const route = resolveRoute(pathname)
+
+  if (route.screen === "landing") return <LandingPage navigate={navigate} />
+  if (route.screen === "guest") return <GuestPage navigate={navigate} />
+
+  const pages = {
+    system: ["SYSTEM", "Dell system", "Live CPU, memory, disk, temperature, network, and uptime metrics arrive in Phase 2."],
+    deployments: ["MINIDEPLOY", "Deployments", "Per-deployment and per-container CPU, RAM, network, disk, uptime, and restart metrics arrive in Phase 3."],
+    databases: ["MINIBASE", "Databases", "Database storage, activity, connections, backups, and estimated CPU and RAM arrive in Phase 4."],
+    activity: ["ACTIVITY", "Activity", "Unified MiniDeploy, MiniBase, and ReactorLab monitoring history arrives later in the monitoring build."],
+  }
+
+  if (route.screen === "overview") {
+    return <AdminShell active="overview" navigate={navigate}><OverviewPage /></AdminShell>
+  }
+
+  if (pages[route.screen]) {
+    const [eyebrow, title, copy] = pages[route.screen]
+    return (
+      <AdminShell active={route.screen} navigate={navigate}>
+        <PlaceholderPage eyebrow={eyebrow} title={title} copy={copy} />
+      </AdminShell>
+    )
+  }
+
+  return <LandingPage navigate={navigate} />
 }
-
-export default App
