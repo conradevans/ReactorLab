@@ -1,0 +1,21 @@
+[Unit]
+Description=ReactorLab Infrastructure Control Center
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=conradevans
+Group=conradevans
+WorkingDirectory=/srv/reactorlab
+ExecStart=/srv/reactorlab/bin/reactorlab -listen 127.0.0.1:9200 -frontend /srv/reactorlab/frontend/dist
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/reactorlab/data
+
+[Install]
+WantedBy=multi-user.target
