@@ -1,15 +1,18 @@
-import { useEffect, useState } from "react"
-
-import { getJSON } from "../api"
+import { formatUptime } from "../format"
+import usePollingJSON from "../usePollingJSON"
 import Brand from "./Brand"
 import ProductNav from "./ProductNav"
 
 export default function GuestPage({ navigate }) {
-  const [status, setStatus] = useState(null)
+  const { data: status, error, loading } = usePollingJSON(
+    "/api/v1/guest/status",
+  )
 
-  useEffect(() => {
-    getJSON("/api/v1/guest/status").then(setStatus).catch(() => setStatus(null))
-  }, [])
+  const health = loading
+    ? "Checking"
+    : status?.status === "ok"
+      ? "Healthy"
+      : "Unavailable"
 
   return (
     <main className="guest-page">
@@ -33,35 +36,34 @@ export default function GuestPage({ navigate }) {
             <p className="eyebrow">GUEST OVERVIEW</p>
             <h1>ReactorLab health.</h1>
             <p>
-              A restricted view of overall ReactorLab and Dell health.
-              Detailed infrastructure information remains administrator-only.
+              A deliberately minimal public view. Detailed infrastructure
+              information remains administrator-only.
             </p>
           </div>
 
           <div className="guest-summary">
             <div>
               <span>REACTORLAB</span>
-              <strong>{status?.status === "ok" ? "Healthy" : "Unknown"}</strong>
+              <strong>{health}</strong>
             </div>
             <div>
-              <span>ACCESS</span>
-              <strong>Guest</strong>
+              <span>DELL UPTIME</span>
+              <strong>{formatUptime(status?.uptimeSeconds)}</strong>
             </div>
           </div>
         </section>
 
-        <section className="content-section">
-          <div className="section-card">
-            <div className="section-heading">
-              <h2>System overview</h2>
-            </div>
+        {error ? <div className="notice error">{error}</div> : null}
 
-            <div className="service-list">
-              <div className="service-row"><strong>ReactorLab</strong><span>Healthy</span></div>
-              <div className="service-row"><strong>MiniDeploy</strong><span>Monitoring pending</span></div>
-              <div className="service-row"><strong>MiniBase</strong><span>Monitoring pending</span></div>
-              <div className="service-row"><strong>Dell</strong><span>Metrics arriving in Phase 2</span></div>
-            </div>
+        <section className="content-section">
+          <div className="section-card guest-boundary-card">
+            <p className="eyebrow">PUBLIC BOUNDARY</p>
+            <h2>Restricted by design</h2>
+            <p className="placeholder-copy">
+              Guest mode exposes only overall availability and uptime.
+              Detailed host and application metrics require administrator
+              access.
+            </p>
           </div>
         </section>
 

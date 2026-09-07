@@ -1596,3 +1596,142 @@ code {
   margin-bottom: 14px;
   border-color: #252b34;
 }
+
+.live-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #7d8591;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.stat-card small,
+.metric-detail small,
+.service-row small {
+  display: block;
+  margin-top: 5px;
+  color: #707986;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.overview-grid,
+.system-section-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.metric-lines {
+  display: grid;
+  gap: 1px;
+  margin-top: 18px;
+  overflow: hidden;
+  border: 1px solid #252a32;
+  border-radius: 10px;
+  background: #252a32;
+}
+
+.metric-lines > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 16px;
+  background: #0d1014;
+}
+
+.metric-lines span,
+.metric-detail span,
+.guest-metrics-grid span {
+  color: #707986;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+}
+
+.metric-lines strong {
+  color: #d9dde3;
+  font-size: 12px;
+}
+
+.metric-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.metric-detail {
+  min-height: 92px;
+  padding: 15px;
+  border: 1px solid #252a32;
+  border-radius: 11px;
+  background: #0d1014;
+}
+
+.metric-detail strong {
+  display: block;
+  margin-top: 8px;
+  color: #f0f0f2;
+  font-size: 22px;
+  line-height: 1.1;
+}
+
+.service-up {
+  color: #5ee08a !important;
+}
+
+.service-down {
+  color: #e27b7b !important;
+}
+
+.guest-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.guest-metrics-grid > div {
+  padding: 16px;
+  border: 1px solid #252a32;
+  border-radius: 11px;
+  background: #0d1014;
+}
+
+.guest-metrics-grid strong {
+  display: block;
+  margin-top: 8px;
+  color: #f0f0f2;
+  font-size: 24px;
+}
+
+.guest-boundary-card {
+  margin-top: 18px;
+}
+
+@media (max-width: 860px) {
+  .overview-grid,
+  .system-section-grid,
+  .guest-metrics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .metric-detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .metric-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .live-refresh {
+    display: none;
+  }
+}

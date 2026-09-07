@@ -5,6 +5,7 @@ import GuestPage from "./components/GuestPage"
 import LandingPage from "./components/LandingPage"
 import OverviewPage from "./components/OverviewPage"
 import PlaceholderPage from "./components/PlaceholderPage"
+import SystemPage from "./components/SystemPage"
 import { resolveRoute } from "./routing"
 
 import "./App.css"
@@ -29,7 +30,6 @@ export default function App() {
   if (route.screen === "guest") return <GuestPage navigate={navigate} />
 
   const pages = {
-    system: ["SYSTEM", "Dell system", "Live CPU, memory, disk, temperature, network, and uptime metrics arrive in Phase 2."],
     deployments: ["MINIDEPLOY", "Deployments", "Per-deployment and per-container CPU, RAM, network, disk, uptime, and restart metrics arrive in Phase 3."],
     databases: ["MINIBASE", "Databases", "Database storage, activity, connections, backups, and estimated CPU and RAM arrive in Phase 4."],
     activity: ["ACTIVITY", "Activity", "Unified MiniDeploy, MiniBase, and ReactorLab monitoring history arrives later in the monitoring build."],
@@ -37,6 +37,10 @@ export default function App() {
 
   if (route.screen === "overview") {
     return <AdminShell active="overview" navigate={navigate}><OverviewPage /></AdminShell>
+  }
+
+  if (route.screen === "system") {
+    return <AdminShell active="system" navigate={navigate}><SystemPage /></AdminShell>
   }
 
   if (pages[route.screen]) {

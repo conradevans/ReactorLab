@@ -303,6 +303,10 @@ func readDisk(mount string) (DiskStats, error) {
 	}, nil
 }
 
+func Uptime() (float64, error) {
+	return readUptime()
+}
+
 func readUptime() (float64, error) {
 	data, err := os.ReadFile("/proc/uptime")
 	if err != nil {

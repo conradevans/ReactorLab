@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -23,18 +24,41 @@ func TestHealth(t *testing.T) {
 	}
 }
 
-func TestGuestStatusIsAllowlisted(t *testing.T) {
+func TestGuestStatusIsMinimal(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/guest/status", nil)
 	w := httptest.NewRecorder()
 
 	NewHandler("").ServeHTTP(w, r)
 
-	body := w.Body.String()
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
 	}
-	if strings.Contains(body, "administrator") || strings.Contains(body, "phase") {
-		t.Fatalf("guest response leaked admin fields: %s", body)
+
+	var body map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(body) != 2 {
+		t.Fatalf("guest response contains unexpected fields: %#v", body)
+	}
+	if body["status"] != "ok" {
+		t.Fatalf("guest status = %#v", body["status"])
+	}
+	uptime, ok := body["uptimeSeconds"].(float64)
+	if !ok || uptime < 0 {
+		t.Fatalf("invalid guest uptime: %#v", body["uptimeSeconds"])
+	}
+}
+
+func TestGuestSystemEndpointDoesNotExist(t *testing.T) {
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/guest/system", nil)
+	w := httptest.NewRecorder()
+
+	NewHandler("").ServeHTTP(w, r)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusNotFound)
 	}
 }
 
