@@ -61,6 +61,14 @@ type ServiceStatus struct {
 	Active bool   `json:"active"`
 }
 
+type BatteryStats struct {
+	Available   bool    `json:"available"`
+	Percent     float64 `json:"percent"`
+	ACAvailable bool    `json:"acAvailable"`
+	ACConnected bool    `json:"acConnected"`
+	Status      string  `json:"status"`
+}
+
 type Metrics struct {
 	CPU           CPUStats         `json:"cpu"`
 	Memory        MemoryStats      `json:"memory"`
@@ -68,6 +76,7 @@ type Metrics struct {
 	Temperature   TemperatureStats `json:"temperature"`
 	UptimeSeconds float64          `json:"uptimeSeconds"`
 	Network       NetworkStats     `json:"network"`
+	Battery       BatteryStats     `json:"battery"`
 	Services      []ServiceStatus  `json:"services"`
 	CollectedAt   time.Time        `json:"collectedAt"`
 }
@@ -151,9 +160,108 @@ func Collect() (Metrics, error) {
 			RXBytesPerSec: counterRate(firstNetwork.rx, secondNetwork.rx, seconds),
 			TXBytesPerSec: counterRate(firstNetwork.tx, secondNetwork.tx, seconds),
 		},
+		Battery:     readPowerSupply("/sys/class/power_supply"),
 		Services:    readServices(),
 		CollectedAt: time.Now().UTC(),
 	}, nil
+}
+
+func readPowerSupply(root string) BatteryStats {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return BatteryStats{}
+	}
+
+	var (
+		percentTotal float64
+		batteryCount int
+		status       string
+		acAvailable  bool
+		acConnected  bool
+	)
+
+	for _, entry := range entries {
+		deviceRoot := filepath.Join(root, entry.Name())
+		typeData, err := os.ReadFile(filepath.Join(deviceRoot, "type"))
+		if err != nil {
+			continue
+		}
+
+		switch strings.ToLower(strings.TrimSpace(string(typeData))) {
+		case "battery":
+			presentData, presentErr := os.ReadFile(filepath.Join(deviceRoot, "present"))
+			if presentErr == nil {
+				present, presentParseErr := strconv.ParseUint(
+					strings.TrimSpace(string(presentData)),
+					10,
+					8,
+				)
+				if presentParseErr == nil && present == 0 {
+					continue
+				}
+			}
+			capacityData, err := os.ReadFile(filepath.Join(deviceRoot, "capacity"))
+			if err != nil {
+				continue
+			}
+			capacity, err := strconv.ParseFloat(
+				strings.TrimSpace(string(capacityData)),
+				64,
+			)
+			if err != nil || capacity < 0 || capacity > 100 {
+				continue
+			}
+
+			percentTotal += capacity
+			batteryCount++
+			if status == "" {
+				statusData, statusErr := os.ReadFile(
+					filepath.Join(deviceRoot, "status"),
+				)
+				if statusErr == nil {
+					status = strings.TrimSpace(string(statusData))
+				}
+			}
+
+		case "mains", "ac":
+			acAvailable = true
+			onlineData, err := os.ReadFile(filepath.Join(deviceRoot, "online"))
+			if err != nil {
+				continue
+			}
+			online, err := strconv.ParseUint(
+				strings.TrimSpace(string(onlineData)),
+				10,
+				8,
+			)
+			if err != nil {
+				continue
+			}
+			acConnected = acConnected || online > 0
+		}
+	}
+
+	if batteryCount == 0 {
+		return BatteryStats{
+			ACAvailable: acAvailable,
+			ACConnected: acConnected,
+		}
+	}
+
+	if !acAvailable {
+		switch strings.ToLower(status) {
+		case "charging", "full", "not charging":
+			acConnected = true
+		}
+	}
+
+	return BatteryStats{
+		Available:   true,
+		ACAvailable: acAvailable,
+		Percent:     percentTotal / float64(batteryCount),
+		ACConnected: acConnected,
+		Status:      status,
+	}
 }
 
 func readCPUStat() (cpuTimes, error) {

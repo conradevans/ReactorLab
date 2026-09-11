@@ -1,5 +1,7 @@
-import Brand from "./Brand"
-import ProductNav from "./ProductNav"
+import { useEffect, useState } from "react"
+
+import { getJSON } from "../api"
+import GlobalHeader from "./GlobalHeader"
 
 const items = [
   ["overview", "/admin", "Overview"],
@@ -10,6 +12,28 @@ const items = [
 ]
 
 export default function AdminShell({ active, navigate, children }) {
+  const [sessionLabel, setSessionLabel] = useState("Admin")
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadSession() {
+      try {
+        const session = await getJSON("/api/v1/session")
+        if (!cancelled && session?.mode === "access" && session.email) {
+          setSessionLabel(`Admin · ${session.email}`)
+        }
+      } catch {
+        if (!cancelled) setSessionLabel("Admin")
+      }
+    }
+
+    void loadSession()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   function go(path) {
     return (event) => {
       event.preventDefault()
@@ -20,27 +44,14 @@ export default function AdminShell({ active, navigate, children }) {
   return (
     <main className="admin-page">
       <div className="app-shell">
-        <header className="topbar">
-          <Brand navigate={navigate} />
-
-          <div className="header-actions">
-            <ProductNav mode="admin" />
-            <div className="control-plane-state">
-              <span className="status-dot status-ready" />
-              <span>
-                <small>REACTORLAB</small>
-                <strong>Foundation online</strong>
-              </span>
-            </div>
-          </div>
-        </header>
+        <GlobalHeader
+          mode="admin"
+          navigate={navigate}
+          sessionLabel={sessionLabel}
+        />
 
         <div className="admin-grid">
           <aside className="sidebar">
-            <a className="nav-item switch-access" href="/" onClick={go("/")}>
-              ← Switch access
-            </a>
-
             <nav aria-label="ReactorLab navigation">
               {items.map(([key, href, label]) => (
                 <a

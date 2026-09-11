@@ -9,6 +9,7 @@ import {
   relationshipStateClass,
   relationshipStateLabel,
 } from "../relationshipMetrics"
+import { ADMIN_POLL_INTERVAL_MS } from "../polling"
 import usePollingJSON from "../usePollingJSON"
 
 function Metric({ label, value, detail }) {
@@ -44,7 +45,10 @@ function deploymentRelationshipMessage(link) {
 
 export default function DatabaseDetailPage({ id, navigate }) {
   const path = `/api/v1/databases/${encodeURIComponent(id)}`
-  const { data: database, error, loading } = usePollingJSON(path)
+  const { data: database, error, loading } = usePollingJSON(
+    path,
+    ADMIN_POLL_INTERVAL_MS,
+  )
   const cachePercent = cacheHitPercent(database)
   const deploymentLink = database?.deployment
 
@@ -76,7 +80,7 @@ export default function DatabaseDetailPage({ id, navigate }) {
         </div>
         <div className="live-refresh">
           <span className="status-dot status-ready" aria-hidden="true" />
-          <span>{error ? "Metrics unavailable" : "Live · refreshes every 5s"}</span>
+          <span>{error ? "Metrics unavailable" : "Live · refreshes every 1s"}</span>
         </div>
       </section>
 

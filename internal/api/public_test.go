@@ -53,6 +53,7 @@ func TestPublicHandlerAllowlist(t *testing.T) {
 		"/admin/databases",
 		"/admin/activity",
 		"/api/v1/status",
+		"/api/v1/session",
 		"/api/v1/system",
 		"/api/v1/deployments",
 		"/api/v1/databases",

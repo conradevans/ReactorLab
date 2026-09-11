@@ -8,6 +8,7 @@ import {
   relationshipStateClass,
   relationshipStateLabel,
 } from "../relationshipMetrics"
+import { ADMIN_POLL_INTERVAL_MS } from "../polling"
 import usePollingJSON from "../usePollingJSON"
 
 function goToDeployment(navigate, app) {
@@ -18,7 +19,10 @@ function goToDeployment(navigate, app) {
 }
 
 export default function DeploymentsPage({ navigate }) {
-  const { data, error, loading } = usePollingJSON("/api/v1/deployments")
+  const { data, error, loading } = usePollingJSON(
+    "/api/v1/deployments",
+    ADMIN_POLL_INTERVAL_MS,
+  )
   const deployments = data?.deployments ?? []
 
   const healthy = deployments.filter(
@@ -51,7 +55,7 @@ export default function DeploymentsPage({ navigate }) {
         </div>
         <div className="live-refresh">
           <span className="status-dot status-ready" aria-hidden="true" />
-          <span>{error ? "Metrics unavailable" : "Live · refreshes every 5s"}</span>
+          <span>{error ? "Metrics unavailable" : "Live · refreshes every 1s"}</span>
         </div>
       </section>
 
@@ -81,6 +85,13 @@ export default function DeploymentsPage({ navigate }) {
       </section>
 
       <section className="deployment-list">
+        {loading && deployments.length === 0 ? (
+          <div className="empty-state resource-loading-state">
+            <h3>Loading deployments…</h3>
+            <p>Collecting MiniDeploy resources and database relationships.</p>
+          </div>
+        ) : null}
+
         {deployments.map((deployment) => {
           const summary = summarizeDeployment(deployment)
           const statusClass = deploymentStatusClass(deployment.status)

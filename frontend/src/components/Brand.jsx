@@ -1,16 +1,18 @@
-export default function Brand({ navigate, subtitle = "Infrastructure control center" }) {
+export default function Brand({ navigate }) {
   function openHome(event) {
     event.preventDefault()
     navigate("/")
   }
 
   return (
-    <a className="brand-link" href="/" onClick={openHome}>
+    <a
+      aria-label="ReactorLab home"
+      className="brand-link"
+      href="/"
+      onClick={openHome}
+    >
       <span className="brand-mark">R</span>
-      <span>
-        <strong className="brand-name">ReactorLab</strong>
-        <span className="brand-subtitle">{subtitle}</span>
-      </span>
+      <strong className="brand-name">ReactorLab</strong>
     </a>
   )
 }

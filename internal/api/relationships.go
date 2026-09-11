@@ -217,3 +217,41 @@ func (h *Handler) deploymentSnapshotForLinks(
 	}
 	return snapshot, true
 }
+
+type databaseSnapshotResult struct {
+	snapshot  minibase.Snapshot
+	available bool
+}
+
+type deploymentSnapshotResult struct {
+	snapshot  minideploy.Snapshot
+	available bool
+}
+
+func (h *Handler) databaseSnapshotForLinksAsync(
+	ctx context.Context,
+) <-chan databaseSnapshotResult {
+	results := make(chan databaseSnapshotResult, 1)
+	go func() {
+		snapshot, available := h.databaseSnapshotForLinks(ctx)
+		results <- databaseSnapshotResult{
+			snapshot:  snapshot,
+			available: available,
+		}
+	}()
+	return results
+}
+
+func (h *Handler) deploymentSnapshotForLinksAsync(
+	ctx context.Context,
+) <-chan deploymentSnapshotResult {
+	results := make(chan deploymentSnapshotResult, 1)
+	go func() {
+		snapshot, available := h.deploymentSnapshotForLinks(ctx)
+		results <- deploymentSnapshotResult{
+			snapshot:  snapshot,
+			available: available,
+		}
+	}()
+	return results
+}

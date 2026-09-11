@@ -1,7 +1,6 @@
 import { formatUptime } from "../format"
 import usePollingJSON from "../usePollingJSON"
-import Brand from "./Brand"
-import ProductNav from "./ProductNav"
+import GlobalHeader from "./GlobalHeader"
 
 export default function GuestPage({ navigate }) {
   const { data: status, error, loading } = usePollingJSON(
@@ -17,19 +16,11 @@ export default function GuestPage({ navigate }) {
   return (
     <main className="guest-page">
       <div className="site-shell">
-        <header className="public-nav">
-          <Brand navigate={navigate} subtitle="Guest infrastructure overview" />
-          <div className="header-actions">
-            <ProductNav mode="guest" />
-            <button
-              className="button secondary"
-              type="button"
-              onClick={() => navigate("/")}
-            >
-              Switch access
-            </button>
-          </div>
-        </header>
+        <GlobalHeader
+          mode="guest"
+          navigate={navigate}
+          sessionLabel="Guest View"
+        />
 
         <section className="guest-hero">
           <div>

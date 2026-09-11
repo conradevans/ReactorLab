@@ -9,6 +9,7 @@ import {
   relationshipStateClass,
   relationshipStateLabel,
 } from "../relationshipMetrics"
+import { ADMIN_POLL_INTERVAL_MS } from "../polling"
 import usePollingJSON from "../usePollingJSON"
 
 function goToDatabase(navigate, id) {
@@ -19,7 +20,10 @@ function goToDatabase(navigate, id) {
 }
 
 export default function DatabasesPage({ navigate }) {
-  const { data, error, loading } = usePollingJSON("/api/v1/databases")
+  const { data, error, loading } = usePollingJSON(
+    "/api/v1/databases",
+    ADMIN_POLL_INTERVAL_MS,
+  )
   const databases = data?.databases ?? []
   const postgres = data?.postgres
   const summary = summarizeDatabases(databases)
@@ -38,7 +42,7 @@ export default function DatabasesPage({ navigate }) {
         </div>
         <div className="live-refresh">
           <span className="status-dot status-ready" aria-hidden="true" />
-          <span>{error ? "Metrics unavailable" : "Live · refreshes every 5s"}</span>
+          <span>{error ? "Metrics unavailable" : "Live · refreshes every 1s"}</span>
         </div>
       </section>
 
@@ -118,6 +122,13 @@ export default function DatabasesPage({ navigate }) {
       </section>
 
       <section className="database-list database-observability-list">
+        {loading && databases.length === 0 ? (
+          <div className="empty-state resource-loading-state">
+            <h3>Loading databases…</h3>
+            <p>Collecting MiniBase resources and deployment relationships.</p>
+          </div>
+        ) : null}
+
         {databases.map((database) => (
           <a
             className="database-row"

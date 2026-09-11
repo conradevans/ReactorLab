@@ -11,6 +11,7 @@ export default function usePollingJSON(path, intervalMs = 5000) {
 
   useEffect(() => {
     let cancelled = false
+    let timeout
 
     async function load() {
       try {
@@ -27,14 +28,17 @@ export default function usePollingJSON(path, intervalMs = 5000) {
           }))
         }
       }
+
+      if (!cancelled) {
+        timeout = window.setTimeout(load, intervalMs)
+      }
     }
 
     void load()
-    const interval = window.setInterval(load, intervalMs)
 
     return () => {
       cancelled = true
-      window.clearInterval(interval)
+      window.clearTimeout(timeout)
     }
   }, [path, intervalMs])
 

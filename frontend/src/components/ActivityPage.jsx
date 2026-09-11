@@ -4,10 +4,14 @@ import {
   activitySourceLabel,
   formatActivityTime,
 } from "../activityMetrics"
+import { ADMIN_POLL_INTERVAL_MS } from "../polling"
 import usePollingJSON from "../usePollingJSON"
 
 export default function ActivityPage() {
-  const { data, error, loading } = usePollingJSON("/api/v1/activity")
+  const { data, error, loading } = usePollingJSON(
+    "/api/v1/activity",
+    ADMIN_POLL_INTERVAL_MS,
+  )
   const events = data?.events || []
 
   const warningCount = events.filter(
@@ -31,7 +35,7 @@ export default function ActivityPage() {
         </div>
         <div className="live-refresh">
           <span className="status-dot status-ready" aria-hidden="true" />
-          <span>{error ? "Activity unavailable" : "Live · refreshes every 5s"}</span>
+          <span>{error ? "Activity unavailable" : "Live · refreshes every 1s"}</span>
         </div>
       </section>
 

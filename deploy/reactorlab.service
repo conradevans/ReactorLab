@@ -9,6 +9,7 @@ User=reactorlab
 Group=reactorlab
 WorkingDirectory=/srv/reactorlab
 ExecStart=/srv/reactorlab/bin/reactorlab -listen 127.0.0.1:9200 -frontend /srv/reactorlab/frontend/dist
+EnvironmentFile=/etc/reactorlab/access.env
 Restart=on-failure
 RestartSec=3
 UMask=0027

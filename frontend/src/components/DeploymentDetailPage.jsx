@@ -8,6 +8,7 @@ import {
   relationshipStateClass,
   relationshipStateLabel,
 } from "../relationshipMetrics"
+import { ADMIN_POLL_INTERVAL_MS } from "../polling"
 import usePollingJSON from "../usePollingJSON"
 
 function Metric({ label, value, detail }) {
@@ -29,7 +30,10 @@ function databaseRelationshipMessage(state) {
 
 export default function DeploymentDetailPage({ app, navigate }) {
   const path = `/api/v1/deployments/${encodeURIComponent(app)}`
-  const { data: deployment, error, loading } = usePollingJSON(path)
+  const { data: deployment, error, loading } = usePollingJSON(
+    path,
+    ADMIN_POLL_INTERVAL_MS,
+  )
   const summary = summarizeDeployment(deployment)
   const databaseLink = deployment?.database
 
@@ -61,7 +65,7 @@ export default function DeploymentDetailPage({ app, navigate }) {
         </div>
         <div className="live-refresh">
           <span className="status-dot status-ready" aria-hidden="true" />
-          <span>{error ? "Metrics unavailable" : "Live · refreshes every 5s"}</span>
+          <span>{error ? "Metrics unavailable" : "Live · refreshes every 1s"}</span>
         </div>
       </section>
 

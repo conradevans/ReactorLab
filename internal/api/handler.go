@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/conradevans/ReactorLab/internal/accessauth"
 	"github.com/conradevans/ReactorLab/internal/history"
 	"github.com/conradevans/ReactorLab/internal/minibase"
 	"github.com/conradevans/ReactorLab/internal/minideploy"
@@ -48,6 +49,7 @@ type Handler struct {
 	miniDeploy  deploymentMetricsSource
 	miniBase    databaseMetricsSource
 	activity    activitySource
+	access      accessauth.TokenValidator
 }
 
 func NewHandler(frontendDir string) http.Handler {
@@ -68,6 +70,20 @@ func NewHandlerWithHistory(
 		minideploy.NewClient(minideploy.DefaultBaseURL, 5*time.Second),
 		minibase.NewClient(minibase.DefaultBaseURL, 5*time.Second),
 		activity,
+	)
+}
+
+func NewHandlerWithHistoryAndAccess(
+	frontendDir string,
+	activity activitySource,
+	access accessauth.TokenValidator,
+) http.Handler {
+	return newHandlerWithAllSourcesAndAccess(
+		frontendDir,
+		minideploy.NewClient(minideploy.DefaultBaseURL, 5*time.Second),
+		minibase.NewClient(minibase.DefaultBaseURL, 5*time.Second),
+		activity,
+		access,
 	)
 }
 
@@ -97,16 +113,34 @@ func newHandlerWithAllSources(
 	miniBase databaseMetricsSource,
 	activity activitySource,
 ) http.Handler {
+	return newHandlerWithAllSourcesAndAccess(
+		frontendDir,
+		miniDeploy,
+		miniBase,
+		activity,
+		nil,
+	)
+}
+
+func newHandlerWithAllSourcesAndAccess(
+	frontendDir string,
+	miniDeploy deploymentMetricsSource,
+	miniBase databaseMetricsSource,
+	activity activitySource,
+	access accessauth.TokenValidator,
+) http.Handler {
 	h := &Handler{
 		mux:         http.NewServeMux(),
 		frontendDir: frontendDir,
 		miniDeploy:  miniDeploy,
 		miniBase:    miniBase,
 		activity:    activity,
+		access:      access,
 	}
 
 	h.mux.HandleFunc("GET /health", h.health)
 	h.mux.HandleFunc("GET /api/v1/status", h.adminStatus)
+	h.mux.HandleFunc("GET /api/v1/session", h.adminSession)
 	h.mux.HandleFunc("GET /api/v1/guest/status", h.guestStatus)
 	h.mux.HandleFunc("GET /api/v1/system", h.adminSystem)
 	h.mux.HandleFunc("GET /api/v1/deployments", h.adminDeployments)
@@ -143,6 +177,38 @@ func (h *Handler) adminStatus(w http.ResponseWriter, _ *http.Request) {
 		"apiVersion": "v1",
 		"mode":       "administrator",
 		"phase":      "foundation",
+	})
+}
+
+func (h *Handler) adminSession(w http.ResponseWriter, r *http.Request) {
+	if h.access == nil {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"mode": "local",
+		})
+		return
+	}
+
+	rawToken := strings.TrimSpace(
+		r.Header.Get(accessauth.AccessJWTHeader),
+	)
+	if rawToken == "" {
+		writeJSON(w, http.StatusUnauthorized, map[string]any{
+			"error": "access_authentication_required",
+		})
+		return
+	}
+
+	identity, err := h.access.Validate(r.Context(), rawToken)
+	if err != nil {
+		writeJSON(w, http.StatusForbidden, map[string]any{
+			"error": "access_denied",
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"mode":  "access",
+		"email": identity.Email,
 	})
 }
 
@@ -206,6 +272,7 @@ func (h *Handler) adminActivity(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) adminDeployments(w http.ResponseWriter, r *http.Request) {
+	databaseResults := h.databaseSnapshotForLinksAsync(r.Context())
 	snapshot, err := h.miniDeploy.Deployments(r.Context())
 	if err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
@@ -214,8 +281,9 @@ func (h *Handler) adminDeployments(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	databaseSnapshot, relationshipsAvailable :=
-		h.databaseSnapshotForLinks(r.Context())
+	databaseResult := <-databaseResults
+	databaseSnapshot := databaseResult.snapshot
+	relationshipsAvailable := databaseResult.available
 
 	deployments := make(
 		[]deploymentResponse,
@@ -280,6 +348,7 @@ func (h *Handler) adminDeployment(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) adminDatabases(w http.ResponseWriter, r *http.Request) {
+	deploymentResults := h.deploymentSnapshotForLinksAsync(r.Context())
 	snapshot, err := h.miniBase.Databases(r.Context())
 	if err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
@@ -288,8 +357,9 @@ func (h *Handler) adminDatabases(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	deploymentSnapshot, relationshipsAvailable :=
-		h.deploymentSnapshotForLinks(r.Context())
+	deploymentResult := <-deploymentResults
+	deploymentSnapshot := deploymentResult.snapshot
+	relationshipsAvailable := deploymentResult.available
 
 	databases := make(
 		[]databaseResponse,

@@ -1,0 +1,1 @@
+export const ADMIN_POLL_INTERVAL_MS = 1000

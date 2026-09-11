@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/conradevans/ReactorLab/internal/accessauth"
 	"github.com/conradevans/ReactorLab/internal/api"
 	"github.com/conradevans/ReactorLab/internal/history"
 	"github.com/conradevans/ReactorLab/internal/metrics"
@@ -68,6 +69,17 @@ func main() {
 		sampler.Run(runContext)
 	}()
 
+	accessValidator, err := accessauth.NewCloudflareValidator(
+		accessauth.ConfigFromEnvironment(),
+	)
+	if err != nil {
+		log.Printf(
+			"warning: ReactorLab Access session identity unavailable: %v",
+			err,
+		)
+		accessValidator = nil
+	}
+
 	servers := []struct {
 		name   string
 		server *http.Server
@@ -75,8 +87,12 @@ func main() {
 		{
 			name: "private",
 			server: &http.Server{
-				Addr:    *listen,
-				Handler: api.NewHandlerWithHistory(*frontend, historyStore),
+				Addr: *listen,
+				Handler: api.NewHandlerWithHistoryAndAccess(
+					*frontend,
+					historyStore,
+					accessValidator,
+				),
 			},
 		},
 		{

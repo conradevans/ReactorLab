@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -8,7 +9,23 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/conradevans/ReactorLab/internal/accessauth"
 )
+
+type stubAccessValidator struct {
+	identity accessauth.Identity
+	err      error
+	token    string
+}
+
+func (validator *stubAccessValidator) Validate(
+	_ context.Context,
+	token string,
+) (accessauth.Identity, error) {
+	validator.token = token
+	return validator.identity, validator.err
+}
 
 func TestHealth(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/health", nil)
@@ -73,6 +90,104 @@ func TestAdminStatus(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), "administrator") {
 		t.Fatalf("response missing administrator mode: %s", w.Body.String())
+	}
+}
+
+func TestAdminSystemIncludesSafeBatteryData(t *testing.T) {
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/system", nil)
+	w := httptest.NewRecorder()
+
+	NewHandler("").ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	battery, ok := body["battery"].(map[string]any)
+	if !ok {
+		t.Fatalf("battery response missing or invalid: %#v", body["battery"])
+	}
+	for _, field := range []string{
+		"available",
+		"percent",
+		"acAvailable",
+		"acConnected",
+		"status",
+	} {
+		if _, exists := battery[field]; !exists {
+			t.Fatalf("battery response missing %q: %#v", field, battery)
+		}
+	}
+	if len(battery) != 5 {
+		t.Fatalf("battery response contains unexpected data: %#v", battery)
+	}
+}
+
+func TestAdminSessionUsesValidatedAccessIdentity(t *testing.T) {
+	validator := &stubAccessValidator{
+		identity: accessauth.Identity{Email: "admin@example.com"},
+	}
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/session", nil)
+	r.Header.Set(accessauth.AccessJWTHeader, "signed-access-token")
+	w := httptest.NewRecorder()
+
+	NewHandlerWithHistoryAndAccess("", nil, validator).ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if validator.token != "signed-access-token" {
+		t.Fatalf("validator token = %q", validator.token)
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body["mode"] != "access" || body["email"] != "admin@example.com" {
+		t.Fatalf("unexpected session response: %#v", body)
+	}
+}
+
+func TestAdminSessionDoesNotTrustPlainEmailHeader(t *testing.T) {
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/session", nil)
+	r.Header.Set("Cf-Access-Authenticated-User-Email", "forged@example.com")
+	w := httptest.NewRecorder()
+
+	NewHandlerWithHistoryAndAccess(
+		"",
+		nil,
+		&stubAccessValidator{},
+	).ServeHTTP(w, r)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusUnauthorized)
+	}
+	if strings.Contains(w.Body.String(), "forged@example.com") {
+		t.Fatalf("session leaked untrusted email: %s", w.Body.String())
+	}
+}
+
+func TestAdminSessionLocalModeContainsNoEmail(t *testing.T) {
+	r := httptest.NewRequest(http.MethodGet, "/api/v1/session", nil)
+	w := httptest.NewRecorder()
+
+	NewHandler("").ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+
+	var body map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body) != 1 || body["mode"] != "local" {
+		t.Fatalf("unexpected local session response: %#v", body)
 	}
 }
 
