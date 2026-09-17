@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -14,6 +15,28 @@ const DefaultBaseURL = "http://127.0.0.1:9100"
 type Client struct {
 	baseURL    string
 	httpClient *http.Client
+}
+
+type GuestSummary struct {
+	Total   int `json:"total"`
+	Showing int `json:"showing"`
+	Hidden  int `json:"hidden"`
+}
+
+type GuestDatabase struct {
+	ID          string `json:"id"`
+	DisplayName string `json:"displayName"`
+	Status      string `json:"status"`
+}
+
+type GuestDatabases struct {
+	Summary   GuestSummary    `json:"summary"`
+	Databases []GuestDatabase `json:"databases"`
+}
+
+type guestDatabasesEnvelope struct {
+	Summary   *GuestSummary   `json:"summary"`
+	Databases []GuestDatabase `json:"databases"`
 }
 
 type Snapshot struct {
@@ -131,6 +154,89 @@ func (c *Client) Databases(ctx context.Context) (Snapshot, error) {
 	}
 
 	return snapshot, nil
+}
+
+func (c *Client) GuestDatabases(ctx context.Context) (GuestDatabases, error) {
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodGet,
+		c.baseURL+"/api/v1/guest/databases",
+		nil,
+	)
+	if err != nil {
+		return GuestDatabases{}, fmt.Errorf("build MiniBase Guest request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return GuestDatabases{}, fmt.Errorf("request MiniBase Guest API: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return GuestDatabases{}, fmt.Errorf(
+			"MiniBase Guest API returned status %d",
+			resp.StatusCode,
+		)
+	}
+
+	var envelope guestDatabasesEnvelope
+	decoder := json.NewDecoder(io.LimitReader(resp.Body, 1<<20))
+	if err := decoder.Decode(&envelope); err != nil {
+		return GuestDatabases{}, fmt.Errorf("decode MiniBase Guest API: %w", err)
+	}
+	if err := ensureJSONEOF(decoder); err != nil {
+		return GuestDatabases{}, fmt.Errorf("decode MiniBase Guest API: %w", err)
+	}
+	if envelope.Summary == nil || envelope.Databases == nil {
+		return GuestDatabases{}, fmt.Errorf("validate MiniBase Guest API: missing response fields")
+	}
+	if err := validateGuestSummary(*envelope.Summary, len(envelope.Databases)); err != nil {
+		return GuestDatabases{}, fmt.Errorf("validate MiniBase Guest API: %w", err)
+	}
+	for _, database := range envelope.Databases {
+		if err := validateGuestDatabase(database); err != nil {
+			return GuestDatabases{}, fmt.Errorf("validate MiniBase Guest API: %w", err)
+		}
+	}
+
+	return GuestDatabases{
+		Summary:   *envelope.Summary,
+		Databases: envelope.Databases,
+	}, nil
+}
+
+func validateGuestSummary(summary GuestSummary, itemCount int) error {
+	if summary.Total < 0 || summary.Showing < 0 || summary.Hidden < 0 {
+		return fmt.Errorf("summary counts must be non-negative")
+	}
+	if summary.Total != summary.Showing+summary.Hidden {
+		return fmt.Errorf("summary total does not equal showing plus hidden")
+	}
+	if summary.Showing != itemCount {
+		return fmt.Errorf("summary showing does not equal returned database count")
+	}
+	return nil
+}
+
+func validateGuestDatabase(database GuestDatabase) error {
+	if strings.TrimSpace(database.ID) == "" ||
+		strings.TrimSpace(database.DisplayName) == "" ||
+		strings.TrimSpace(database.Status) == "" {
+		return fmt.Errorf("database fields must be non-empty")
+	}
+	return nil
+}
+
+func ensureJSONEOF(decoder *json.Decoder) error {
+	var trailing any
+	if err := decoder.Decode(&trailing); err != io.EOF {
+		if err == nil {
+			return fmt.Errorf("multiple JSON values")
+		}
+		return err
+	}
+	return nil
 }
 
 func FindDatabase(snapshot Snapshot, id string) (Database, bool) {

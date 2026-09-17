@@ -44,33 +44,25 @@ type activityResponse struct {
 }
 
 type Handler struct {
-	mux         *http.ServeMux
-	frontendDir string
-	miniDeploy  deploymentMetricsSource
-	miniBase    databaseMetricsSource
-	activity    activitySource
-	access      accessauth.TokenValidator
+	mux             *http.ServeMux
+	frontendDir     string
+	miniDeploy      deploymentMetricsSource
+	miniBase        databaseMetricsSource
+	guestMiniDeploy guestDeploymentSource
+	guestMiniBase   guestDatabaseSource
+	activity        activitySource
+	access          accessauth.TokenValidator
 }
 
 func NewHandler(frontendDir string) http.Handler {
-	return newHandlerWithAllSources(
-		frontendDir,
-		minideploy.NewClient(minideploy.DefaultBaseURL, 5*time.Second),
-		minibase.NewClient(minibase.DefaultBaseURL, 5*time.Second),
-		nil,
-	)
+	return newProductionHandler(frontendDir, nil, nil)
 }
 
 func NewHandlerWithHistory(
 	frontendDir string,
 	activity activitySource,
 ) http.Handler {
-	return newHandlerWithAllSources(
-		frontendDir,
-		minideploy.NewClient(minideploy.DefaultBaseURL, 5*time.Second),
-		minibase.NewClient(minibase.DefaultBaseURL, 5*time.Second),
-		activity,
-	)
+	return newProductionHandler(frontendDir, activity, nil)
 }
 
 func NewHandlerWithHistoryAndAccess(
@@ -78,12 +70,71 @@ func NewHandlerWithHistoryAndAccess(
 	activity activitySource,
 	access accessauth.TokenValidator,
 ) http.Handler {
-	return newHandlerWithAllSourcesAndAccess(
+	return newProductionHandler(frontendDir, activity, access)
+}
+
+func newProductionHandler(
+	frontendDir string,
+	activity activitySource,
+	access accessauth.TokenValidator,
+) http.Handler {
+	return newHandlerWithServiceClients(
 		frontendDir,
-		minideploy.NewClient(minideploy.DefaultBaseURL, 5*time.Second),
-		minibase.NewClient(minibase.DefaultBaseURL, 5*time.Second),
 		activity,
 		access,
+		newProductionServiceClients(),
+	)
+}
+
+type serviceClients struct {
+	privateMiniDeploy *minideploy.Client
+	guestMiniDeploy   *minideploy.Client
+	miniBase          *minibase.Client
+}
+
+func newProductionServiceClients() serviceClients {
+	return newServiceClients(
+		minideploy.DefaultBaseURL,
+		minideploy.DefaultGuestBaseURL,
+		minibase.DefaultBaseURL,
+	)
+}
+
+func newServiceClients(
+	privateMiniDeployBaseURL string,
+	guestMiniDeployBaseURL string,
+	miniBaseBaseURL string,
+) serviceClients {
+	return serviceClients{
+		privateMiniDeploy: minideploy.NewClient(
+			privateMiniDeployBaseURL,
+			5*time.Second,
+		),
+		guestMiniDeploy: minideploy.NewClient(
+			guestMiniDeployBaseURL,
+			5*time.Second,
+		),
+		miniBase: minibase.NewClient(
+			miniBaseBaseURL,
+			5*time.Second,
+		),
+	}
+}
+
+func newHandlerWithServiceClients(
+	frontendDir string,
+	activity activitySource,
+	access accessauth.TokenValidator,
+	clients serviceClients,
+) http.Handler {
+	return newHandlerWithAllSourcesAndAccessAndGuestSources(
+		frontendDir,
+		clients.privateMiniDeploy,
+		clients.miniBase,
+		activity,
+		access,
+		clients.guestMiniDeploy,
+		clients.miniBase,
 	)
 }
 
@@ -129,19 +180,58 @@ func newHandlerWithAllSourcesAndAccess(
 	activity activitySource,
 	access accessauth.TokenValidator,
 ) http.Handler {
+	return newHandlerWithAllSourcesAndAccessAndGuestSources(
+		frontendDir,
+		miniDeploy,
+		miniBase,
+		activity,
+		access,
+		nil,
+		nil,
+	)
+}
+
+func newHandlerWithGuestSources(
+	frontendDir string,
+	miniDeploy guestDeploymentSource,
+	miniBase guestDatabaseSource,
+) http.Handler {
+	return newHandlerWithAllSourcesAndAccessAndGuestSources(
+		frontendDir,
+		nil,
+		nil,
+		nil,
+		nil,
+		miniDeploy,
+		miniBase,
+	)
+}
+
+func newHandlerWithAllSourcesAndAccessAndGuestSources(
+	frontendDir string,
+	miniDeploy deploymentMetricsSource,
+	miniBase databaseMetricsSource,
+	activity activitySource,
+	access accessauth.TokenValidator,
+	guestMiniDeploy guestDeploymentSource,
+	guestMiniBase guestDatabaseSource,
+) http.Handler {
 	h := &Handler{
-		mux:         http.NewServeMux(),
-		frontendDir: frontendDir,
-		miniDeploy:  miniDeploy,
-		miniBase:    miniBase,
-		activity:    activity,
-		access:      access,
+		mux:             http.NewServeMux(),
+		frontendDir:     frontendDir,
+		miniDeploy:      miniDeploy,
+		miniBase:        miniBase,
+		guestMiniDeploy: guestMiniDeploy,
+		guestMiniBase:   guestMiniBase,
+		activity:        activity,
+		access:          access,
 	}
 
 	h.mux.HandleFunc("GET /health", h.health)
 	h.mux.HandleFunc("GET /api/v1/status", h.adminStatus)
 	h.mux.HandleFunc("GET /api/v1/session", h.adminSession)
 	h.mux.HandleFunc("GET /api/v1/guest/status", h.guestStatus)
+	h.mux.HandleFunc("GET /api/v1/guest/resources", h.guestResources)
 	h.mux.HandleFunc("GET /api/v1/system", h.adminSystem)
 	h.mux.HandleFunc("GET /api/v1/deployments", h.adminDeployments)
 	h.mux.HandleFunc("GET /api/v1/deployments/{app}", h.adminDeployment)

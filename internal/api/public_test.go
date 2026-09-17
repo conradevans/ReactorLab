@@ -24,7 +24,11 @@ func TestPublicHandlerAllowlist(t *testing.T) {
 		}
 	}
 
-	handler := NewPublicHandler(frontend)
+	handler := newPublicHandler(
+		frontend,
+		emptyGuestDeploymentSource(),
+		emptyGuestDatabaseSource(),
+	)
 
 	allowed := []string{
 		"/health",
@@ -32,6 +36,7 @@ func TestPublicHandlerAllowlist(t *testing.T) {
 		"/guest",
 		"/guest/",
 		"/api/v1/guest/status",
+		"/api/v1/guest/resources",
 		"/favicon.svg",
 		"/assets/app.js",
 	}

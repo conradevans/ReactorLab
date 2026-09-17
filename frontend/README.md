@@ -1,3 +1,15 @@
+# ReactorLab frontend
+
+The public `/guest` route loads only ReactorLab's same-origin
+`/api/v1/guest/resources` aggregate. It renders MiniDeploy-approved deployment
+cards on the left and MiniBase-approved database cards on the right, stacking
+them in that order on narrow screens.
+
+Deployment links use only the guest-safe `url` supplied by MiniDeploy.
+Database cards are informational. Each section handles loading, empty, and
+upstream-unavailable states independently; private telemetry is never rendered
+on the Guest page.
+
 # React + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.

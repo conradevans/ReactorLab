@@ -8,7 +8,24 @@ import (
 // NewPublicHandler exposes only ReactorLab's public guest surface.
 // Administrator routes and APIs remain available only on the private listener.
 func NewPublicHandler(frontendDir string) http.Handler {
-	h := &Handler{frontendDir: frontendDir}
+	clients := newProductionServiceClients()
+	return newPublicHandler(
+		frontendDir,
+		clients.guestMiniDeploy,
+		clients.miniBase,
+	)
+}
+
+func newPublicHandler(
+	frontendDir string,
+	miniDeploy guestDeploymentSource,
+	miniBase guestDatabaseSource,
+) http.Handler {
+	h := &Handler{
+		frontendDir:     frontendDir,
+		guestMiniDeploy: miniDeploy,
+		guestMiniBase:   miniBase,
+	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -21,6 +38,8 @@ func NewPublicHandler(frontendDir string) http.Handler {
 			h.health(w, r)
 		case r.URL.Path == "/api/v1/guest/status":
 			h.guestStatus(w, r)
+		case r.URL.Path == "/api/v1/guest/resources":
+			h.guestResources(w, r)
 		case r.URL.Path == "/",
 			r.URL.Path == "/guest",
 			r.URL.Path == "/guest/",
