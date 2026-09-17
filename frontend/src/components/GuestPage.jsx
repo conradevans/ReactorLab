@@ -1,3 +1,4 @@
+import { formatUptime } from "../format"
 import usePollingJSON from "../usePollingJSON"
 import GlobalHeader from "./GlobalHeader"
 
@@ -36,34 +37,39 @@ function DeploymentCard({ deployment }) {
   const running = deployment.status === "running"
 
   return (
-    <article className="guest-deployment-card">
-      <div className="guest-card-state">
-        <span
-          className={`status-dot ${running ? "live" : "down"}`}
-          aria-hidden="true"
-        />
+    <article className="guest-resource-card guest-deployment-card">
+      <div className="guest-deployment-primary">
+        <h3 title={deployment.app}>{deployment.app}</h3>
         <span className={`status-pill ${running ? "live" : "down"}`}>
+          <span
+            className={`status-dot ${running ? "live" : "down"}`}
+            aria-hidden="true"
+          />
           {String(deployment.status || "unknown").toUpperCase()}
         </span>
       </div>
 
-      <div className="guest-card-copy">
-        <p>PUBLIC APPLICATION</p>
-        <h3>{deployment.app}</h3>
-        <a href={deployment.url} target="_blank" rel="noreferrer">
+      <div className="guest-deployment-secondary">
+        <a
+          className="guest-deployment-url"
+          href={deployment.url}
+          target="_blank"
+          rel="noreferrer"
+          title={deployment.url}
+        >
           {deployment.url}
         </a>
+        <a
+          className="guest-open-link"
+          href={deployment.url}
+          target="_blank"
+          rel="noreferrer"
+          aria-label={`Open ${deployment.app}`}
+        >
+          Open
+          <span aria-hidden="true">↗</span>
+        </a>
       </div>
-
-      <a
-        className="button secondary guest-open-button"
-        href={deployment.url}
-        target="_blank"
-        rel="noreferrer"
-      >
-        Open application
-        <span aria-hidden="true">↗</span>
-      </a>
     </article>
   )
 }
@@ -72,7 +78,7 @@ function DatabaseCard({ database }) {
   const label = databaseStatusLabels[database.status] || database.status
 
   return (
-    <article className="guest-database-card">
+    <article className="guest-resource-card guest-database-card">
       <h3>{database.displayName}</h3>
       <span className={`status-badge status-${database.status}`}>
         <span className="status-dot" aria-hidden="true" />
@@ -148,9 +154,19 @@ function ResourceSection({
 }
 
 export default function GuestPage({ navigate }) {
-  const { data, error, loading } = usePollingJSON(
+  const {
+    data: resources,
+    error: resourcesError,
+    loading: resourcesLoading,
+  } = usePollingJSON(
     "/api/v1/guest/resources",
   )
+  const { data: status, error: statusError } = usePollingJSON(
+    "/api/v1/guest/status",
+  )
+  const runtime = statusError
+    ? "Unavailable"
+    : formatUptime(status?.uptimeSeconds)
 
   return (
     <main className="guest-page">
@@ -162,13 +178,23 @@ export default function GuestPage({ navigate }) {
         />
 
         <section className="guest-hero reactor-guest-hero">
-          <div>
+          <div className="reactor-guest-intro">
             <p className="eyebrow">REACTORLAB / GUEST</p>
             <h1>Personal developer cloud.</h1>
             <p>
               Applications and databases intentionally shared through
               MiniDeploy and MiniBase, presented through one read-only view.
             </p>
+          </div>
+
+          <div
+            className="guest-summary guest-runtime-summary"
+            aria-label="ReactorLab runtime summary"
+          >
+            <div>
+              <span>TOTAL RUNTIME</span>
+              <strong>{runtime}</strong>
+            </div>
           </div>
         </section>
 
@@ -177,17 +203,17 @@ export default function GuestPage({ navigate }) {
             kind="deployments"
             title="Deployments"
             eyebrow="PUBLIC APPLICATIONS"
-            section={data?.deployments}
-            loading={loading}
-            requestFailed={Boolean(error)}
+            section={resources?.deployments}
+            loading={resourcesLoading}
+            requestFailed={Boolean(resourcesError)}
           />
           <ResourceSection
             kind="databases"
             title="Databases"
             eyebrow="SAFE METADATA"
-            section={data?.databases}
-            loading={loading}
-            requestFailed={Boolean(error)}
+            section={resources?.databases}
+            loading={resourcesLoading}
+            requestFailed={Boolean(resourcesError)}
           />
         </div>
 

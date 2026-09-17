@@ -37,13 +37,35 @@ function responseWith(overrides = {}) {
   }
 }
 
-function stubResources(value) {
-  const fetch = vi.fn().mockResolvedValue({
-    ok: true,
-    json: vi.fn().mockResolvedValue(value),
+function stubGuestRequests({
+  resources = responseWith(),
+  status = { status: "ok", uptimeSeconds: 372180 },
+  resourcesOK = true,
+  statusOK = true,
+} = {}) {
+  const fetch = vi.fn().mockImplementation((path) => {
+    if (path === "/api/v1/guest/resources") {
+      return Promise.resolve({
+        ok: resourcesOK,
+        status: resourcesOK ? 200 : 503,
+        json: vi.fn().mockResolvedValue(resources),
+      })
+    }
+    if (path === "/api/v1/guest/status") {
+      return Promise.resolve({
+        ok: statusOK,
+        status: statusOK ? 200 : 503,
+        json: vi.fn().mockResolvedValue(status),
+      })
+    }
+    return Promise.reject(new Error(`Unexpected request: ${path}`))
   })
   vi.stubGlobal("fetch", fetch)
   return fetch
+}
+
+function stubResources(value) {
+  return stubGuestRequests({ resources: value })
 }
 
 describe("GuestPage", () => {
@@ -73,6 +95,37 @@ describe("GuestPage", () => {
       headers: { Accept: "application/json" },
       cache: "no-store",
     })
+    expect(fetch).toHaveBeenCalledWith("/api/v1/guest/status", {
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    })
+  })
+
+  test("renders Total Runtime with the established human-readable format", async () => {
+    stubGuestRequests({
+      status: { status: "ok", uptimeSeconds: 372180 },
+    })
+    render(<GuestPage navigate={vi.fn()} />)
+
+    expect(await screen.findByText("4d 7h 23m")).toBeTruthy()
+    expect(
+      screen.getByLabelText("ReactorLab runtime summary").textContent,
+    ).toContain("TOTAL RUNTIME4d 7h 23m")
+  })
+
+  test("keeps resources available when the runtime request fails", async () => {
+    stubGuestRequests({ statusOK: false })
+    render(<GuestPage navigate={vi.fn()} />)
+
+    expect(await screen.findByText("portfolio")).toBeTruthy()
+    expect(screen.getByText("Shared Database")).toBeTruthy()
+    expect(screen.getByText("Unavailable")).toBeTruthy()
+    expect(
+      screen.queryByText("Deployment information is temporarily unavailable."),
+    ).toBeNull()
+    expect(
+      screen.queryByText("Database information is temporarily unavailable."),
+    ).toBeNull()
   })
 
   test("preserves the approved deployment link and informational database card", async () => {
@@ -83,7 +136,8 @@ describe("GuestPage", () => {
     const publicURL = screen.getByRole("link", {
       name: "https://portfolio.reactorlab.dev",
     })
-    const openLink = screen.getByRole("link", { name: /Open application/ })
+    const openLink = screen.getByRole("link", { name: "Open portfolio" })
+    expect(screen.getByText("RUNNING")).toBeTruthy()
 
     expect(appName).toBeTruthy()
     expect(publicURL.getAttribute("href")).toBe(
@@ -93,10 +147,18 @@ describe("GuestPage", () => {
       "https://portfolio.reactorlab.dev",
     )
     expect(openLink.getAttribute("target")).toBe("_blank")
+    expect(openLink.getAttribute("rel")).toBe("noreferrer")
+
+    const deploymentCard = appName.closest("article")
+    expect(deploymentCard.classList.contains("guest-resource-card")).toBe(true)
+    expect(deploymentCard.classList.contains("guest-deployment-card")).toBe(true)
 
     const databaseName = screen.getByText("Shared Database")
     expect(databaseName.closest("a")).toBeNull()
-    expect(databaseName.closest("article")).toBeTruthy()
+    const databaseCard = databaseName.closest("article")
+    expect(databaseCard).toBeTruthy()
+    expect(databaseCard.classList.contains("guest-resource-card")).toBe(true)
+    expect(databaseCard.classList.contains("guest-database-card")).toBe(true)
   })
 
   test("renders independent zero-shared states without hidden placeholders", async () => {
@@ -163,10 +225,7 @@ describe("GuestPage", () => {
   })
 
   test("shows safe unavailable states when the aggregate request fails", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
-      ok: false,
-      status: 503,
-    }))
+    stubGuestRequests({ resourcesOK: false })
     render(<GuestPage navigate={vi.fn()} />)
 
     expect(
@@ -192,7 +251,7 @@ describe("GuestPage", () => {
       "Temperature",
       "Battery",
       "Load average",
-      "Uptime",
+      "Network",
       "MiniAI",
     ]) {
       expect(screen.queryByText(label, { exact: false })).toBeNull()
