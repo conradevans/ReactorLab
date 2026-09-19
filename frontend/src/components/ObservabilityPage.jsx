@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 
+import {
+  CHART_GEOMETRY,
+  formatInspectionTimestamp,
+  inspectChartPosition,
+  interpolateChartValue,
+  prepareChartPoints,
+} from "../chartInspection"
 import { formatBytes, formatPercent, formatRate, formatTemperature } from "../format"
 import {
   getApplicationObservability,
@@ -52,18 +59,16 @@ function eventLabel(value) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
-function Chart({ title, description, points, series, formatValue, fixedMax }) {
+export function Chart({ title, description, points, series, formatValue, fixedMax }) {
+  const svgRef = useRef(null)
+  const [inspection, setInspection] = useState(null)
   const chart = useMemo(() => {
-    const width = 680
-    const height = 190
-    const top = 16
-    const bottom = 28
-    const left = 12
-    const right = 12
+    const { width, height, top, bottom, left, right } = CHART_GEOMETRY
+    const orderedPoints = prepareChartPoints(points)
     const values = []
-    for (const point of points) {
+    for (const entry of orderedPoints) {
       for (const item of series) {
-        const value = finite(item.value(point))
+        const value = finite(item.value(entry.point))
         if (value !== null) values.push(value)
       }
     }
@@ -71,28 +76,72 @@ function Chart({ title, description, points, series, formatValue, fixedMax }) {
     const maximum = fixedMax || Math.max(...values, 1)
     const minimum = Math.min(0, ...values)
     const range = Math.max(maximum - minimum, 1)
-    const timestamps = points.map((point) => new Date(point.timestamp || point.bucketStart).getTime())
-    const start = Math.min(...timestamps)
-    const end = Math.max(...timestamps)
+    const start = orderedPoints[0].timestamp
+    const end = orderedPoints.at(-1).timestamp
     const duration = Math.max(end - start, 1)
-    const x = (point) => left + ((new Date(point.timestamp || point.bucketStart).getTime() - start) / duration) * (width - left - right)
+    const x = (entry) => left + ((entry.timestamp - start) / duration) * (width - left - right)
     const y = (value) => top + ((maximum - value) / range) * (height - top - bottom)
     const lines = series.map((item) => {
       let path = ""
       let drawing = false
-      for (const point of points) {
-        const value = finite(item.value(point))
+      for (const entry of orderedPoints) {
+        const value = finite(item.value(entry.point))
         if (value === null) {
           drawing = false
           continue
         }
-        path += `${drawing ? " L" : "M"} ${x(point).toFixed(1)} ${y(value).toFixed(1)}`
+        path += `${drawing ? " L" : "M"} ${x(entry).toFixed(1)} ${y(value).toFixed(1)}`
         drawing = true
       }
       return { ...item, path }
     })
-    return { width, height, lines, start, end }
+    return {
+      bottom,
+      end,
+      height,
+      left,
+      lines,
+      orderedPoints,
+      right,
+      start,
+      top,
+      width,
+    }
   }, [fixedMax, points, series])
+
+  function updateInspection(event, pinned) {
+    if (!chart || !svgRef.current) return
+    const position = inspectChartPosition(
+      event.clientX,
+      svgRef.current.getBoundingClientRect(),
+      chart.start,
+      chart.end,
+    )
+    setInspection({ ...position, pinned, points })
+  }
+
+  function handlePointerMove(event) {
+    if ((event.pointerType || "mouse") !== "mouse") return
+    updateInspection(event, false)
+  }
+
+  function handlePointerDown(event) {
+    if ((event.pointerType || "mouse") === "mouse") return
+    updateInspection(event, true)
+  }
+
+  const activeInspection = inspection?.points === points ? inspection : null
+  const inspectionValues = chart && activeInspection
+    ? series.map((item, index) => ({
+      color: item.color || COLORS[index],
+      label: item.label,
+      value: interpolateChartValue(
+        chart.orderedPoints,
+        item.value,
+        activeInspection.timestamp,
+      ),
+    }))
+    : []
 
   return (
     <article className="observability-chart-card">
@@ -114,34 +163,94 @@ function Chart({ title, description, points, series, formatValue, fixedMax }) {
         <div className="chart-empty">No samples in this range</div>
       ) : (
         <div className="chart-wrap">
-          <svg
-            aria-label={`${title} historical chart`}
-            className="history-chart"
-            role="img"
-            viewBox={`0 0 ${chart.width} ${chart.height}`}
-          >
-            <line x1="12" x2="668" y1="16" y2="16" />
-            <line x1="12" x2="668" y1="89" y2="89" />
-            <line x1="12" x2="668" y1="162" y2="162" />
-            {chart.lines.map((line, index) => (
-              <path
-                className={line.dashed ? "chart-line dashed" : "chart-line"}
-                d={line.path}
-                key={line.label}
-                stroke={line.color || COLORS[index]}
+          <div className="chart-canvas">
+            <svg
+              aria-label={`${title} historical chart`}
+              className="history-chart"
+              ref={svgRef}
+              role="img"
+              viewBox={`0 0 ${chart.width} ${chart.height}`}
+            >
+              <line x1={chart.left} x2={chart.width - chart.right} y1={chart.top} y2={chart.top} />
+              <line x1={chart.left} x2={chart.width - chart.right} y1="89" y2="89" />
+              <line x1={chart.left} x2={chart.width - chart.right} y1={chart.height - chart.bottom} y2={chart.height - chart.bottom} />
+              {chart.lines.map((line, index) => (
+                <path
+                  className={line.dashed ? "chart-line dashed" : "chart-line"}
+                  d={line.path}
+                  key={line.label}
+                  stroke={line.color || COLORS[index]}
+                />
+              ))}
+              <rect
+                aria-hidden="true"
+                className="chart-inspection-target"
+                data-testid="chart-inspection-target"
+                height={chart.height - chart.top - chart.bottom}
+                onPointerDown={handlePointerDown}
+                onPointerEnter={handlePointerMove}
+                onPointerLeave={() => {
+                  setInspection((current) => (
+                    current?.points === points && current.pinned ? current : null
+                  ))
+                }}
+                onPointerMove={handlePointerMove}
+                width={chart.width - chart.left - chart.right}
+                x={chart.left}
+                y={chart.top}
               />
-            ))}
-          </svg>
+              {activeInspection ? (
+                <line
+                  aria-hidden="true"
+                  className="chart-crosshair"
+                  data-testid="chart-crosshair"
+                  x1={activeInspection.x}
+                  x2={activeInspection.x}
+                  y1={chart.top}
+                  y2={chart.height - chart.bottom}
+                />
+              ) : null}
+            </svg>
+            {activeInspection ? (
+              <div
+                className={`chart-inspection-tooltip ${activeInspection.normalized > 0.62 ? "align-left" : "align-right"}`}
+                data-testid="chart-inspection-tooltip"
+                style={{ "--inspection-left": `${(activeInspection.x / chart.width) * 100}%` }}
+              >
+                <time
+                  dateTime={new Date(activeInspection.timestamp).toISOString()}
+                  data-testid="chart-inspection-time"
+                >
+                  {formatInspectionTimestamp(activeInspection.timestamp)}
+                </time>
+                <dl>
+                  {inspectionValues.map((item) => (
+                    <div key={item.label}>
+                      <dt>
+                        <i style={{ background: item.color }} />
+                        {item.label}
+                      </dt>
+                      <dd style={{ color: item.color }}>
+                        {item.value === null ? "—" : formatValue(item.value)}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            ) : null}
+          </div>
           <div className="chart-axis">
             <span>{timeLabel(chart.start)}</span>
             <span>{timeLabel(chart.end)}</span>
           </div>
           <div className="chart-latest">
             {series.map((item, index) => {
-              const latest = [...points].reverse().find((point) => finite(item.value(point)) !== null)
+              const latest = [...chart.orderedPoints]
+                .reverse()
+                .find((entry) => finite(item.value(entry.point)) !== null)
               return (
                 <span key={item.label} style={{ color: item.color || COLORS[index] }}>
-                  {item.label} {latest ? formatValue(item.value(latest)) : "—"}
+                  {item.label} {latest ? formatValue(item.value(latest.point)) : "—"}
                 </span>
               )
             })}
