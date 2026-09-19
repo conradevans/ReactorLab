@@ -8,6 +8,7 @@ import DeploymentDetailPage from "./components/DeploymentDetailPage"
 import DeploymentsPage from "./components/DeploymentsPage"
 import GuestPage from "./components/GuestPage"
 import LandingPage from "./components/LandingPage"
+import ObservabilityPage from "./components/ObservabilityPage"
 import OverviewPage from "./components/OverviewPage"
 import SystemPage from "./components/SystemPage"
 import { resolveRoute } from "./routing"
@@ -53,6 +54,14 @@ export default function App() {
     return (
       <AdminShell active="system" navigate={navigate}>
         <SystemPage />
+      </AdminShell>
+    )
+  }
+
+  if (route.screen === "observability") {
+    return (
+      <AdminShell active="observability" navigate={navigate}>
+        <ObservabilityPage />
       </AdminShell>
     )
   }

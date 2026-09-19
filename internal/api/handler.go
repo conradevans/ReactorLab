@@ -14,6 +14,7 @@ import (
 	"github.com/conradevans/ReactorLab/internal/history"
 	"github.com/conradevans/ReactorLab/internal/minibase"
 	"github.com/conradevans/ReactorLab/internal/minideploy"
+	"github.com/conradevans/ReactorLab/internal/observability"
 	reactorsystem "github.com/conradevans/ReactorLab/internal/system"
 )
 
@@ -27,6 +28,15 @@ type databaseMetricsSource interface {
 
 type activitySource interface {
 	ListActivity(context.Context, int) ([]history.ActivityEvent, error)
+}
+
+type observabilitySource interface {
+	QueryHost(context.Context, observability.Range) ([]observability.HostPoint, error)
+	QueryTemperature(context.Context, observability.Range) ([]observability.TemperaturePoint, error)
+	QueryApplications(context.Context, observability.Range) ([]observability.ApplicationSummary, error)
+	QueryApplication(context.Context, string, observability.Range) ([]observability.ApplicationPoint, error)
+	QueryServices(context.Context, observability.Range) ([]observability.ServiceSeries, error)
+	QueryEvents(context.Context, time.Time, time.Time, int) ([]observability.Event, error)
 }
 
 type activityEventResponse struct {
@@ -51,6 +61,7 @@ type Handler struct {
 	guestMiniDeploy guestDeploymentSource
 	guestMiniBase   guestDatabaseSource
 	activity        activitySource
+	observability   observabilitySource
 	access          accessauth.TokenValidator
 }
 
@@ -71,6 +82,24 @@ func NewHandlerWithHistoryAndAccess(
 	access accessauth.TokenValidator,
 ) http.Handler {
 	return newProductionHandler(frontendDir, activity, access)
+}
+
+func NewHandlerWithHistoryAccessAndObservability(
+	frontendDir string,
+	activity activitySource,
+	access accessauth.TokenValidator,
+	source observabilitySource,
+	miniDeployURL string,
+	miniBaseURL string,
+) http.Handler {
+	handler := newHandlerWithServiceClients(
+		frontendDir, activity, access,
+		newServiceClients(miniDeployURL, minideploy.DefaultGuestBaseURL, miniBaseURL),
+	)
+	h := handler.(*Handler)
+	h.observability = source
+	h.registerObservabilityRoutes()
+	return h
 }
 
 func newProductionHandler(

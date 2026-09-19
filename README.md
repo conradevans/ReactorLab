@@ -4,6 +4,14 @@ ReactorLab is the infrastructure overview and monitoring control center for the 
 
 MiniDeploy manages applications. MiniBase manages databases. ReactorLab observes the complete system and will later provide the data layer for MiniAI.
 
+## Historical observability
+
+The private Admin control plane records seven days of host, temperature,
+per-application, and service metrics in a dedicated SQLite store. See
+[Historical Observability v1](docs/historical-observability.md) for collection
+intervals, schema behavior, bounded APIs, retention, security, and event-source
+limitations.
+
 ## Guest resource aggregation
 
 ReactorLab's public Guest View is a read-only showcase of resources that the

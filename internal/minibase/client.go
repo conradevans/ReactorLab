@@ -98,6 +98,16 @@ type PostgresMetrics struct {
 	PIDs             int64   `json:"pids"`
 }
 
+type Activity struct {
+	DatabaseID          string    `json:"databaseId,omitempty"`
+	DatabaseDisplayName string    `json:"databaseDisplayName,omitempty"`
+	Type                string    `json:"type"`
+	Outcome             string    `json:"outcome"`
+	Source              string    `json:"source"`
+	Detail              string    `json:"detail"`
+	CreatedAt           time.Time `json:"createdAt"`
+}
+
 func NewClient(baseURL string, timeout time.Duration) *Client {
 	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if baseURL == "" {
@@ -154,6 +164,45 @@ func (c *Client) Databases(ctx context.Context) (Snapshot, error) {
 	}
 
 	return snapshot, nil
+}
+
+func (c *Client) Activity(ctx context.Context) ([]Activity, error) {
+	req, err := http.NewRequestWithContext(
+		ctx,
+		http.MethodGet,
+		c.baseURL+"/api/v1/activity",
+		nil,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("build MiniBase activity request: %w", err)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request MiniBase activity: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("MiniBase activity returned status %d", resp.StatusCode)
+	}
+	var events []Activity
+	decoder := json.NewDecoder(io.LimitReader(resp.Body, 1<<20))
+	if err := decoder.Decode(&events); err != nil {
+		return nil, fmt.Errorf("decode MiniBase activity: %w", err)
+	}
+	if err := ensureJSONEOF(decoder); err != nil {
+		return nil, fmt.Errorf("decode MiniBase activity: %w", err)
+	}
+	if events == nil {
+		events = []Activity{}
+	}
+	for _, event := range events {
+		if event.CreatedAt.IsZero() || strings.TrimSpace(event.Type) == "" ||
+			strings.TrimSpace(event.Outcome) == "" || strings.TrimSpace(event.Source) == "" ||
+			strings.TrimSpace(event.Detail) == "" {
+			return nil, fmt.Errorf("validate MiniBase activity: invalid event")
+		}
+	}
+	return events, nil
 }
 
 func (c *Client) GuestDatabases(ctx context.Context) (GuestDatabases, error) {

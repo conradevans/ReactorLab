@@ -3,6 +3,7 @@ export function resolveRoute(pathname) {
   if (pathname === "/guest") return { screen: "guest" }
   if (pathname === "/admin") return { screen: "overview" }
   if (pathname === "/admin/system") return { screen: "system" }
+  if (pathname === "/admin/observability") return { screen: "observability" }
   if (pathname === "/admin/deployments") return { screen: "deployments" }
 
   const deploymentPrefix = "/admin/deployments/"

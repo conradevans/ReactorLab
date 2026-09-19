@@ -17,6 +17,7 @@ import (
 	"github.com/conradevans/ReactorLab/internal/api"
 	"github.com/conradevans/ReactorLab/internal/history"
 	"github.com/conradevans/ReactorLab/internal/metrics"
+	"github.com/conradevans/ReactorLab/internal/observability"
 )
 
 type serverResult struct {
@@ -37,6 +38,14 @@ func main() {
 		"/srv/reactorlab/data/reactorlab.db",
 		"ReactorLab history database path",
 	)
+	observabilityPath := flag.String(
+		"observability",
+		"/srv/reactorlab/data/observability.db",
+		"ReactorLab historical observability database path",
+	)
+	miniDeployURL := flag.String("minideploy-url", "http://127.0.0.1:9000", "MiniDeploy management base URL")
+	miniBaseURL := flag.String("minibase-url", "http://127.0.0.1:9100", "MiniBase management base URL")
+	miniAIURL := flag.String("miniai-url", "http://127.0.0.1:9300", "MiniAI base URL")
 	flag.Parse()
 
 	requireLoopback("private", *listen)
@@ -69,6 +78,28 @@ func main() {
 		sampler.Run(runContext)
 	}()
 
+	var (
+		observabilityStore *observability.Store
+		observabilityQuery *observability.QueryService
+		observabilityDone  chan struct{}
+	)
+	observabilityStore, err = observability.Open(*observabilityPath)
+	if err != nil {
+		log.Printf("warning: historical observability unavailable: %v", err)
+		observabilityStore = nil
+	} else {
+		observabilityQuery = observability.NewQueryService(observabilityStore)
+		collector := observability.NewCollector(observabilityStore, observability.CollectorConfig{
+			MiniDeployURL: *miniDeployURL,
+			MiniBaseURL:   *miniBaseURL,
+			MiniAIURL:     *miniAIURL,
+		})
+		observabilityDone = make(chan struct{})
+		go func() {
+			defer close(observabilityDone)
+			collector.Run(runContext)
+		}()
+	}
 	accessValidator, err := accessauth.NewCloudflareValidator(
 		accessauth.ConfigFromEnvironment(),
 	)
@@ -80,6 +111,25 @@ func main() {
 		accessValidator = nil
 	}
 
+	privateHandler := api.NewHandlerWithHistoryAccessAndObservability(
+		*frontend,
+		historyStore,
+		accessValidator,
+		nil,
+		*miniDeployURL,
+		*miniBaseURL,
+	)
+	if observabilityQuery != nil {
+		privateHandler = api.NewHandlerWithHistoryAccessAndObservability(
+			*frontend,
+			historyStore,
+			accessValidator,
+			observabilityQuery,
+			*miniDeployURL,
+			*miniBaseURL,
+		)
+	}
+
 	servers := []struct {
 		name   string
 		server *http.Server
@@ -87,12 +137,8 @@ func main() {
 		{
 			name: "private",
 			server: &http.Server{
-				Addr: *listen,
-				Handler: api.NewHandlerWithHistoryAndAccess(
-					*frontend,
-					historyStore,
-					accessValidator,
-				),
+				Addr:    *listen,
+				Handler: privateHandler,
 			},
 		},
 		{
@@ -139,6 +185,15 @@ func main() {
 
 	stop()
 	<-samplerDone
+
+	if observabilityDone != nil {
+		<-observabilityDone
+	}
+	if observabilityStore != nil {
+		if err := observabilityStore.Close(); err != nil {
+			log.Printf("close historical observability: %v", err)
+		}
+	}
 
 	for resultsSeen < len(servers) {
 		logServerResult(<-serverResults)

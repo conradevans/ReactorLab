@@ -6,6 +6,7 @@ import GlobalHeader from "./GlobalHeader"
 const items = [
   ["overview", "/admin", "Overview"],
   ["system", "/admin/system", "System"],
+  ["observability", "/admin/observability", "Observability"],
   ["deployments", "/admin/deployments", "Deployments"],
   ["databases", "/admin/databases", "Databases"],
   ["activity", "/admin/activity", "Activity"],
