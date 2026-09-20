@@ -6,18 +6,21 @@ import {
   inspectChartPosition,
   interpolateChartValue,
   prepareChartPoints,
+  rangeMaximum,
+  summarizeChartSeries,
+  weightedRangeAverage,
 } from "../chartInspection"
 import { Chart } from "./ObservabilityPage"
 
 const start = Date.parse("2026-09-19T15:37:40Z")
 const end = start + 8_000
 const points = [
-  { timestamp: new Date(start).toISOString(), average: 0, peak: 5 },
-  { timestamp: new Date(end).toISOString(), average: 80, peak: 45 },
+  { timestamp: new Date(start).toISOString(), sampleCount: 1, average: 0, peak: 5 },
+  { timestamp: new Date(end).toISOString(), sampleCount: 3, average: 80, peak: 45 },
 ]
 const series = [
-  { label: "Average", value: (point) => point.average },
-  { label: "Peak", value: (point) => point.peak, color: "#fb7185" },
+  { label: "Average", value: (point) => point.average, summaryAggregation: "average", showInTooltip: true },
+  { label: "Peak", value: (point) => point.peak, summaryAggregation: "max", showInTooltip: true, color: "#fb7185" },
 ]
 const formatValue = (value) => `${value.toFixed(1)} widgets`
 
@@ -52,6 +55,56 @@ function renderChart(chartPoints = points) {
 
 afterEach(() => {
   cleanup()
+})
+
+describe("chart range summaries", () => {
+  test("weighted averages use every valid bucket and honor sampleCount", () => {
+    const rangePoints = [
+      { value: 10, sampleCount: 1 },
+      { value: 30, sampleCount: 3 },
+      { value: 999, sampleCount: 0 },
+      { value: Infinity, sampleCount: 2 },
+      { value: 999, sampleCount: "4" },
+      { value: 5, sampleCount: 1 },
+    ]
+
+    expect(weightedRangeAverage(rangePoints, (point) => point.value)).toBe(21)
+  })
+
+  test("weighted averages return unavailable when every value or sample count is invalid", () => {
+    const average = weightedRangeAverage([
+      { value: 10, sampleCount: 0 },
+      { value: Number.NaN, sampleCount: 2 },
+      { value: 20, sampleCount: -1 },
+    ], (point) => point.value)
+
+    expect(average).toBeNull()
+  })
+
+  test("temperature peak uses the highest finite maxCelsius across the range", () => {
+    const rangePoints = [
+      { maxCelsius: 70 },
+      { maxCelsius: 91 },
+      { maxCelsius: Infinity },
+      { maxCelsius: 75 },
+    ]
+
+    expect(rangeMaximum(rangePoints, (point) => point.maxCelsius)).toBe(91)
+  })
+
+  test("explicit metadata produces weighted RX/TX summaries and a range maximum", () => {
+    const rangePoints = [
+      { sampleCount: 1, rx: 10, tx: 20, peak: 90 },
+      { sampleCount: 3, rx: 30, tx: 100, peak: 60 },
+    ]
+    const summaries = summarizeChartSeries(rangePoints, [
+      { label: "RX", value: (point) => point.rx, summaryAggregation: "average" },
+      { label: "TX", value: (point) => point.tx, summaryAggregation: "average" },
+      { label: "Peak", value: (point) => point.peak, summaryAggregation: "max" },
+    ])
+
+    expect(summaries.map((item) => item.summaryValue)).toEqual([25, 80, 90])
+  })
 })
 
 describe("chart inspection calculations", () => {
@@ -128,6 +181,25 @@ describe("chart inspection calculations", () => {
 })
 
 describe("Chart pointer interaction", () => {
+  test("permanent values summarize the selected range instead of the latest sample", () => {
+    renderChart()
+
+    expect(screen.getByText("Average 60.0 widgets")).toBeTruthy()
+    expect(screen.getByText("Peak 45.0 widgets")).toBeTruthy()
+    expect(screen.queryByText("Average 80.0 widgets")).toBeNull()
+  })
+
+  test("permanent average displays unavailable when every sample count is invalid", () => {
+    const invalidPoints = [
+      { timestamp: new Date(start).toISOString(), sampleCount: 0, average: 10, peak: 5 },
+      { timestamp: new Date(end).toISOString(), sampleCount: Number.NaN, average: 20, peak: 7 },
+    ]
+    renderChart(invalidPoints)
+
+    expect(screen.getByText("Average —")).toBeTruthy()
+    expect(screen.getByText("Peak 7.0 widgets")).toBeTruthy()
+  })
+
   test("mouse movement shows a continuously positioned crosshair and formatted interpolation", () => {
     const { target } = renderChart()
 
@@ -138,7 +210,7 @@ describe("Chart pointer interaction", () => {
     expect(screen.getByTestId("chart-inspection-time").textContent).toMatch(/:37:42/)
     expect(screen.getByText("15.0 widgets")).toBeTruthy()
     expect(screen.getByText("20.0 widgets")).toBeTruthy()
-    expect(screen.getByText("Average 80.0 widgets")).toBeTruthy()
+    expect(screen.getByText("Average 60.0 widgets")).toBeTruthy()
 
     fireEvent.pointerMove(target, { clientX: 504, pointerType: "mouse" })
 
@@ -153,6 +225,7 @@ describe("Chart pointer interaction", () => {
       points[0],
       {
         timestamp: new Date(start + 4_000).toISOString(),
+        sampleCount: 1,
         average: null,
         peak: 25,
       },
@@ -191,12 +264,12 @@ describe("Chart pointer interaction", () => {
     expect(screen.getByText("60.0 widgets")).toBeTruthy()
   })
 
-  test("new chart data clears a touch-pinned inspection while preserving latest values", async () => {
+  test("new chart data clears a touch-pinned inspection while preserving range summaries", async () => {
     const { rerender, target } = renderChart()
 
     fireEvent.pointerDown(target, { clientX: 340, pointerType: "pen" })
     expect(screen.getByTestId("chart-inspection-tooltip")).toBeTruthy()
-    expect(screen.getByText("Average 80.0 widgets")).toBeTruthy()
+    expect(screen.getByText("Average 60.0 widgets")).toBeTruthy()
 
     const nextPoints = points.map((point) => ({
       ...point,
@@ -215,6 +288,6 @@ describe("Chart pointer interaction", () => {
     await waitFor(() => {
       expect(screen.queryByTestId("chart-inspection-tooltip")).toBeNull()
     })
-    expect(screen.getByText("Average 80.0 widgets")).toBeTruthy()
+    expect(screen.getByText("Average 60.0 widgets")).toBeTruthy()
   })
 })

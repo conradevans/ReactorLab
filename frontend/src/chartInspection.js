@@ -29,6 +29,42 @@ export function prepareChartPoints(points) {
     ))
 }
 
+export function weightedRangeAverage(points, valueForPoint) {
+  let weightedTotal = 0
+  let totalSamples = 0
+  for (const point of points) {
+    const value = valueForPoint(point)
+    const sampleCount = point?.sampleCount
+    if (!Number.isFinite(value) || !Number.isFinite(sampleCount) || sampleCount <= 0) continue
+    weightedTotal += value * sampleCount
+    totalSamples += sampleCount
+  }
+  if (totalSamples === 0) return null
+  const average = weightedTotal / totalSamples
+  return Number.isFinite(average) ? average : null
+}
+
+export function rangeMaximum(points, valueForPoint) {
+  let maximum = null
+  for (const point of points) {
+    const value = valueForPoint(point)
+    if (!Number.isFinite(value)) continue
+    maximum = maximum === null ? value : Math.max(maximum, value)
+  }
+  return maximum
+}
+
+export function summarizeChartSeries(points, series) {
+  return series.map((item) => ({
+    ...item,
+    summaryValue: item.summaryAggregation === "max"
+      ? rangeMaximum(points, item.value)
+      : item.summaryAggregation === "average"
+        ? weightedRangeAverage(points, item.value)
+        : null,
+  }))
+}
+
 export function inspectChartPosition(clientX, rect, start, end, geometry = CHART_GEOMETRY) {
   const rawX = rect.width > 0
     ? ((clientX - rect.left) * geometry.width) / rect.width

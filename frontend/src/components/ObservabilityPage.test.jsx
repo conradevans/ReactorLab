@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, describe, expect, test, vi } from "vitest"
 
 import ObservabilityPage from "./ObservabilityPage"
@@ -97,6 +97,17 @@ function stubObservability({ empty = false, fail = false } = {}) {
   return fetch
 }
 
+function inspectChart(title) {
+  const heading = screen.getByRole("heading", { name: title, level: 3 })
+  const card = heading.closest("article")
+  const target = within(card).getByTestId("chart-inspection-target")
+  fireEvent.pointerMove(target, { clientX: 340, pointerType: "mouse" })
+  return {
+    card,
+    tooltip: within(card).getByTestId("chart-inspection-tooltip"),
+  }
+}
+
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
@@ -132,6 +143,48 @@ describe("ObservabilityPage", () => {
     expect(screen.getByText("MiniBase")).toBeTruthy()
     expect(screen.getByText("Backup created")).toBeTruthy()
     expect(fetch.mock.calls.some(([path]) => path.includes("/apps/alpha?range=1h"))).toBe(true)
+  })
+
+  test("uses primary point-in-time values and retains genuinely distinct tooltip metrics", async () => {
+    stubObservability()
+    render(<ObservabilityPage />)
+    await screen.findByText("Restarts 2 → 2")
+
+    const primaryCharts = [
+      ["CPU", "CPU", "Maximum"],
+      ["Memory", "Memory", "Maximum"],
+      ["Temperature", "Temperature", "Peak"],
+      ["Application CPU", "CPU", "Maximum"],
+    ]
+    for (const [title, primaryLabel, excludedLabel] of primaryCharts) {
+      const { card, tooltip } = inspectChart(title)
+      expect(within(tooltip).getByText(primaryLabel)).toBeTruthy()
+      expect(within(tooltip).queryByText(excludedLabel)).toBeNull()
+      expect(card.querySelectorAll("path.chart-line")).toHaveLength(2)
+      expect(tooltip.querySelectorAll("dl > div")).toHaveLength(1)
+    }
+
+    const distinctCharts = [
+      ["Load", ["1m", "5m", "15m"]],
+      ["Disk capacity", ["Used"]],
+      ["Disk I/O", ["Read", "Write"]],
+      ["Network", ["RX", "TX"]],
+      ["Application network", ["RX", "TX"]],
+    ]
+    for (const [title, labels] of distinctCharts) {
+      const { tooltip } = inspectChart(title)
+      for (const label of labels) {
+        expect(within(tooltip).getByText(label)).toBeTruthy()
+      }
+      expect(tooltip.querySelectorAll("dl > div")).toHaveLength(labels.length)
+    }
+
+    const { tooltip: memoryTooltip } = inspectChart("Application memory")
+    for (const label of ["Used", "Limit"]) {
+      expect(within(memoryTooltip).getByText(label)).toBeTruthy()
+    }
+    expect(within(memoryTooltip).queryByText("Maximum")).toBeNull()
+    expect(memoryTooltip.querySelectorAll("dl > div")).toHaveLength(2)
   })
 
   test("range and application changes issue only bounded preset requests", async () => {

@@ -6,6 +6,7 @@ import {
   inspectChartPosition,
   interpolateChartValue,
   prepareChartPoints,
+  summarizeChartSeries,
 } from "../chartInspection"
 import { formatBytes, formatPercent, formatRate, formatTemperature } from "../format"
 import {
@@ -109,6 +110,11 @@ export function Chart({ title, description, points, series, formatValue, fixedMa
     }
   }, [fixedMax, points, series])
 
+  const summaryValues = useMemo(
+    () => summarizeChartSeries(points, series),
+    [points, series],
+  )
+
   function updateInspection(event, pinned) {
     if (!chart || !svgRef.current) return
     const position = inspectChartPosition(
@@ -132,15 +138,15 @@ export function Chart({ title, description, points, series, formatValue, fixedMa
 
   const activeInspection = inspection?.points === points ? inspection : null
   const inspectionValues = chart && activeInspection
-    ? series.map((item, index) => ({
+    ? series.flatMap((item, index) => (item.showInTooltip ? [{
       color: item.color || COLORS[index],
-      label: item.label,
+      label: item.tooltipLabel || item.label,
       value: interpolateChartValue(
         chart.orderedPoints,
         item.value,
         activeInspection.timestamp,
       ),
-    }))
+    }] : []))
     : []
 
   return (
@@ -244,16 +250,11 @@ export function Chart({ title, description, points, series, formatValue, fixedMa
             <span>{timeLabel(chart.end)}</span>
           </div>
           <div className="chart-latest">
-            {series.map((item, index) => {
-              const latest = [...chart.orderedPoints]
-                .reverse()
-                .find((entry) => finite(item.value(entry.point)) !== null)
-              return (
-                <span key={item.label} style={{ color: item.color || COLORS[index] }}>
-                  {item.label} {latest ? formatValue(item.value(latest.point)) : "—"}
-                </span>
-              )
-            })}
+            {summaryValues.map((item, index) => (
+              <span key={item.label} style={{ color: item.color || COLORS[index] }}>
+                {item.label} {item.summaryValue === null ? "—" : formatValue(item.summaryValue)}
+              </span>
+            ))}
           </div>
         </div>
       )}
@@ -417,32 +418,32 @@ export default function ObservabilityPage() {
         </div>
         <div className="observability-chart-grid">
           <Chart title="CPU" description="Average with preserved maximum" points={host} fixedMax={100} formatValue={formatPercent} series={[
-            { label: "Average", value: (point) => point.cpuAverage },
-            { label: "Maximum", value: (point) => point.cpuMaximum, color: COLORS[2], dashed: true },
+            { label: "Average", tooltipLabel: "CPU", value: (point) => point.cpuAverage, summaryAggregation: "average", showInTooltip: true },
+            { label: "Maximum", value: (point) => point.cpuMaximum, summaryAggregation: "max", showInTooltip: false, color: COLORS[2], dashed: true },
           ]} />
           <Chart title="Memory" description="Used memory percentage" points={host} fixedMax={100} formatValue={formatPercent} series={[
-            { label: "Average", value: (point) => percent(point.memoryUsedAverage, point.memoryTotal) },
-            { label: "Maximum", value: (point) => percent(point.memoryUsedMaximum, point.memoryTotal), color: COLORS[2], dashed: true },
+            { label: "Average", tooltipLabel: "Memory", value: (point) => percent(point.memoryUsedAverage, point.memoryTotal), summaryAggregation: "average", showInTooltip: true },
+            { label: "Maximum", value: (point) => percent(point.memoryUsedMaximum, point.memoryTotal), summaryAggregation: "max", showInTooltip: false, color: COLORS[2], dashed: true },
           ]} />
           <Chart title="Temperature" description="Average and peak preserve brief thermal spikes" points={temperature} formatValue={formatTemperature} series={[
-            { label: "Average", value: (point) => point.avgCelsius },
-            { label: "Peak", value: (point) => point.maxCelsius, color: "#fb7185", dashed: true },
+            { label: "Average", tooltipLabel: "Temperature", value: (point) => point.avgCelsius, summaryAggregation: "average", showInTooltip: true },
+            { label: "Peak", value: (point) => point.maxCelsius, summaryAggregation: "max", showInTooltip: false, color: "#fb7185", dashed: true },
           ]} />
           <Chart title="Load" description="Linux load averages" points={host} formatValue={(value) => value.toFixed(2)} series={[
-            { label: "1m", value: (point) => point.load1Average },
-            { label: "5m", value: (point) => point.load5Average, color: COLORS[1] },
-            { label: "15m", value: (point) => point.load15Average, color: COLORS[2] },
+            { label: "1m", value: (point) => point.load1Average, summaryAggregation: "average", showInTooltip: true },
+            { label: "5m", value: (point) => point.load5Average, summaryAggregation: "average", showInTooltip: true, color: COLORS[1] },
+            { label: "15m", value: (point) => point.load15Average, summaryAggregation: "average", showInTooltip: true, color: COLORS[2] },
           ]} />
           <Chart title="Disk capacity" description="Root filesystem used" points={host} fixedMax={100} formatValue={formatPercent} series={[
-            { label: "Used", value: (point) => percent(point.diskUsedAverage, point.diskTotal) },
+            { label: "Used", value: (point) => percent(point.diskUsedAverage, point.diskTotal), summaryAggregation: "average", showInTooltip: true },
           ]} />
           <Chart title="Disk I/O" description="Root backing device throughput" points={host} formatValue={formatRate} series={[
-            { label: "Read", value: (point) => point.diskReadAverage },
-            { label: "Write", value: (point) => point.diskWriteAverage, color: COLORS[1] },
+            { label: "Read", value: (point) => point.diskReadAverage, summaryAggregation: "average", showInTooltip: true },
+            { label: "Write", value: (point) => point.diskWriteAverage, summaryAggregation: "average", showInTooltip: true, color: COLORS[1] },
           ]} />
           <Chart title="Network" description="Default-route interface throughput" points={host} formatValue={formatRate} series={[
-            { label: "RX", value: (point) => point.networkRxAverage },
-            { label: "TX", value: (point) => point.networkTxAverage, color: COLORS[1] },
+            { label: "RX", value: (point) => point.networkRxAverage, summaryAggregation: "average", showInTooltip: true },
+            { label: "TX", value: (point) => point.networkTxAverage, summaryAggregation: "average", showInTooltip: true, color: COLORS[1] },
           ]} />
         </div>
       </section>
@@ -504,17 +505,17 @@ export default function ObservabilityPage() {
         ) : null}
         <div className="observability-chart-grid application-charts">
           <Chart title="Application CPU" description="Container CPU for the selected application" points={appPoints} formatValue={formatPercent} series={[
-            { label: "Average", value: (point) => point.cpuAverage },
-            { label: "Maximum", value: (point) => point.cpuMaximum, color: COLORS[2], dashed: true },
+            { label: "Average", tooltipLabel: "CPU", value: (point) => point.cpuAverage, summaryAggregation: "average", showInTooltip: true },
+            { label: "Maximum", value: (point) => point.cpuMaximum, summaryAggregation: "max", showInTooltip: false, color: COLORS[2], dashed: true },
           ]} />
           <Chart title="Application memory" description="Used memory across application containers" points={appPoints} formatValue={formatBytes} series={[
-            { label: "Used", value: (point) => point.memoryUsedAverage },
-            { label: "Maximum", value: (point) => point.memoryUsedMaximum, color: COLORS[2], dashed: true },
-            { label: "Limit", value: (point) => point.memoryLimitAverage, color: COLORS[3], dashed: true },
+            { label: "Used", value: (point) => point.memoryUsedAverage, summaryAggregation: "average", showInTooltip: true },
+            { label: "Maximum", value: (point) => point.memoryUsedMaximum, summaryAggregation: "max", showInTooltip: false, color: COLORS[2], dashed: true },
+            { label: "Limit", value: (point) => point.memoryLimitAverage, summaryAggregation: "average", showInTooltip: true, color: COLORS[3], dashed: true },
           ]} />
           <Chart title="Application network" description="Container receive and transmit throughput" points={appPoints} formatValue={formatRate} series={[
-            { label: "RX", value: (point) => point.networkRxAverage },
-            { label: "TX", value: (point) => point.networkTxAverage, color: COLORS[1] },
+            { label: "RX", value: (point) => point.networkRxAverage, summaryAggregation: "average", showInTooltip: true },
+            { label: "TX", value: (point) => point.networkTxAverage, summaryAggregation: "average", showInTooltip: true, color: COLORS[1] },
           ]} />
         </div>
       </section>
