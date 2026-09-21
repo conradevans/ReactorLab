@@ -19,6 +19,30 @@ func openTestStore(t *testing.T) *Store {
 	return store
 }
 
+func requireRecoveryEventIndex(t *testing.T, store *Store) {
+	t.Helper()
+	rows, err := store.db.Query("PRAGMA index_info(events_type_occurred_at)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var columns []string
+	for rows.Next() {
+		var sequence, columnID int
+		var name string
+		if err := rows.Scan(&sequence, &columnID, &name); err != nil {
+			t.Fatal(err)
+		}
+		columns = append(columns, name)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if len(columns) != 2 || columns[0] != "event_type" || columns[1] != "occurred_at_ms" {
+		t.Fatalf("recovery event index columns = %v", columns)
+	}
+}
+
 func floatPointer(value float64) *float64 { return &value }
 
 func TestOpenCreatesSecureSchemaAndReopens(t *testing.T) {
@@ -35,6 +59,7 @@ func TestOpenCreatesSecureSchemaAndReopens(t *testing.T) {
 	if version != SchemaVersion {
 		t.Fatalf("schema version = %d", version)
 	}
+	requireRecoveryEventIndex(t, store)
 	if err := store.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -58,6 +83,62 @@ func TestOpenCreatesSecureSchemaAndReopens(t *testing.T) {
 	}
 	if err := reopened.Close(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestOpenMigratesV1ToCurrentWithoutLosingEvents(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "observability", "history.db")
+	store, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	event := newEvent(
+		"test",
+		"existing-event",
+		"host_restart",
+		"host",
+		"dell",
+		"Dell host",
+		time.Date(2026, 9, 21, 8, 0, 0, 0, time.UTC),
+		"existing event",
+		nil,
+	)
+	if err := store.InsertBatch(ctx, Batch{Events: []Event{event}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.ExecContext(ctx, "DROP TABLE recovery_discord_outbox"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.ExecContext(ctx, "DROP INDEX events_type_occurred_at"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.ExecContext(ctx, "DELETE FROM schema_migrations WHERE version >= 2"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	migrated, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = migrated.Close() })
+	var version int
+	if err := migrated.db.QueryRowContext(ctx, "SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil {
+		t.Fatal(err)
+	}
+	if version != SchemaVersion {
+		t.Fatalf("schema version = %d, want %d", version, SchemaVersion)
+	}
+	requireRecoveryEventIndex(t, migrated)
+	var count int
+	if err := migrated.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM events WHERE event_id = ?", event.ID).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("preserved event count = %d, want 1", count)
 	}
 }
 

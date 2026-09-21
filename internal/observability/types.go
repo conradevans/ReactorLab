@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	SchemaVersion    = 1
+	SchemaVersion    = 3
 	MetricRetention  = 7 * 24 * time.Hour
 	MaxDisplayPoints = 720
 )
@@ -74,6 +74,23 @@ type Event struct {
 	Details       map[string]any `json:"details,omitempty"`
 }
 
+type RecoveryIncident struct {
+	EventID          string    `json:"eventId"`
+	LastKnownAliveAt time.Time `json:"lastKnownAliveAt"`
+	RecoveredAt      time.Time `json:"recoveredAt"`
+	DowntimeSeconds  int64     `json:"downtimeSeconds"`
+	Status           string    `json:"status"`
+	PreviousBootID   string    `json:"previousBootId"`
+	RecoveryBootID   string    `json:"recoveryBootId"`
+}
+
+// RecoveryIncidentWrite keeps recovery incidents canonical in the events table
+// while making notification intent explicit for live versus historical writes.
+type RecoveryIncidentWrite struct {
+	Event  Event
+	Notify bool
+}
+
 type AlertRule struct {
 	ID              string    `json:"id"`
 	Scope           string    `json:"scope"`
@@ -105,6 +122,7 @@ type Batch struct {
 	Services     []ServiceSample
 	Events       []Event
 	State        map[string]string
+	Recoveries   []RecoveryIncidentWrite
 }
 
 type AlertRepository interface {
@@ -191,4 +209,7 @@ type HistoricalQuery interface {
 	QueryApplication(context.Context, string, Range) ([]ApplicationPoint, error)
 	QueryServices(context.Context, Range) ([]ServiceSeries, error)
 	QueryEvents(context.Context, time.Time, time.Time, int) ([]Event, error)
+	LatestRecoveryIncident(context.Context) (*RecoveryIncident, error)
+	ListRecoveryIncidents(context.Context, int) ([]RecoveryIncident, error)
+	RecoveryIncidentByID(context.Context, string) (*RecoveryIncident, error)
 }

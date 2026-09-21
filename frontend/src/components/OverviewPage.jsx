@@ -1,4 +1,6 @@
 import {
+  formatCompactDate,
+  formatDuration,
   formatPercent,
   formatTemperature,
   formatUptime,
@@ -65,7 +67,44 @@ function batteryDetail(battery) {
   return battery.status ? `${battery.status} · AC power` : "AC power"
 }
 
-export default function OverviewPage() {
+const recoveryEventIDPattern = /^[0-9a-f]{64}$/
+
+const recoveryProtectionStates = new Set([
+  "armed",
+  "not_armed",
+  "unavailable",
+])
+
+function recoveryProtectionState(protection) {
+  if (recoveryProtectionStates.has(protection?.state)) return protection.state
+  const hardwareState = protection?.hardwareWatchdog?.state
+  const rtcState = protection?.rtc?.state
+  if (hardwareState === "armed" || rtcState === "armed") return "armed"
+  if (hardwareState === "not_armed" || rtcState === "not_armed") {
+    return "not_armed"
+  }
+  return "unavailable"
+}
+
+function recoveryProtectionPresentation(state) {
+  if (state === "armed") {
+    return { label: "Armed", className: "service-up" }
+  }
+  if (state === "not_armed") {
+    return { label: "Not armed", className: "recovery-warning" }
+  }
+  return { label: "Unavailable", className: "recovery-unavailable" }
+}
+
+function usableRecoveryIncident(incident) {
+  if (!recoveryEventIDPattern.test(incident?.eventId || "")) return null
+  if (!Number.isFinite(incident?.downtimeSeconds)) return null
+  const recoveredAt = new Date(incident?.recoveredAt)
+  if (Number.isNaN(recoveredAt.getTime())) return null
+  return incident
+}
+
+export default function OverviewPage({ navigate }) {
   const { data: system, error, loading } = usePollingJSON(
     "/api/v1/system",
     ADMIN_POLL_INTERVAL_MS,
@@ -73,6 +112,13 @@ export default function OverviewPage() {
 
   const activeServices =
     system?.services?.filter((service) => service.active).length ?? 0
+  const protection = recoveryProtectionPresentation(
+    recoveryProtectionState(system?.recovery?.protection),
+  )
+  const lastRecovery = usableRecoveryIncident(system?.recovery?.lastIncident)
+  const lastRecoveryPath = lastRecovery
+    ? `/admin/activity?event=${encodeURIComponent(lastRecovery.eventId)}`
+    : ""
   const serviceCount = system?.services?.length ?? 0
 
   return (
@@ -163,6 +209,37 @@ export default function OverviewPage() {
                 {serviceCount ? `${activeServices}/${serviceCount} active` : "—"}
               </strong>
             </div>
+            <div>
+              <span>Automatic recovery</span>
+              <strong className={protection.className}>
+                {protection.label}
+              </strong>
+            </div>
+            {lastRecovery ? (
+              <a
+                className="system-health-link"
+                href={lastRecoveryPath}
+                onClick={(event) => {
+                  if (!navigate) return
+                  event.preventDefault()
+                  navigate(lastRecoveryPath)
+                }}
+              >
+                <span>Last recovery</span>
+                <strong>
+                  {formatCompactDate(lastRecovery.recoveredAt)} ·{" "}
+                  {formatDuration(lastRecovery.downtimeSeconds)}
+                  <span className="recovery-link-arrow" aria-hidden="true">
+                    →
+                  </span>
+                </strong>
+              </a>
+            ) : (
+              <div>
+                <span>Last recovery</span>
+                <strong>None recorded</strong>
+              </div>
+            )}
           </div>
         </article>
 

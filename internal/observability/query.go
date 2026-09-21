@@ -260,6 +260,118 @@ func (q *QueryService) QueryEvents(ctx context.Context, from, to time.Time, limi
 	return events, rows.Err()
 }
 
+func (q *QueryService) LatestRecoveryIncident(ctx context.Context) (*RecoveryIncident, error) {
+	row := q.store.db.QueryRowContext(ctx, `SELECT event_id, details_json
+		FROM events WHERE event_type = ?
+		ORDER BY occurred_at_ms DESC, event_id DESC LIMIT 1`, recoveryEventType)
+	var eventID, detailsJSON string
+	if err := row.Scan(&eventID, &detailsJSON); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("query latest recovery incident: %w", err)
+	}
+	var details struct {
+		LastKnownAliveAt time.Time `json:"lastKnownAliveAt"`
+		RecoveredAt      time.Time `json:"recoveredAt"`
+		DowntimeSeconds  int64     `json:"downtimeSeconds"`
+		Status           string    `json:"status"`
+		PreviousBootID   string    `json:"previousBootId"`
+		RecoveryBootID   string    `json:"recoveryBootId"`
+	}
+	if err := json.Unmarshal([]byte(detailsJSON), &details); err != nil {
+		return nil, fmt.Errorf("decode latest recovery incident: %w", err)
+	}
+	if eventID == "" || details.LastKnownAliveAt.IsZero() || details.RecoveredAt.IsZero() ||
+		details.DowntimeSeconds < 0 || details.Status != recoveryIncidentStatus ||
+		strings.TrimSpace(details.PreviousBootID) == "" ||
+		strings.TrimSpace(details.RecoveryBootID) == "" {
+		return nil, fmt.Errorf("decode latest recovery incident: invalid recovery details")
+	}
+	return &RecoveryIncident{
+		EventID:          eventID,
+		LastKnownAliveAt: details.LastKnownAliveAt.UTC(),
+		RecoveredAt:      details.RecoveredAt.UTC(),
+		DowntimeSeconds:  details.DowntimeSeconds,
+		Status:           details.Status,
+		PreviousBootID:   details.PreviousBootID,
+		RecoveryBootID:   details.RecoveryBootID,
+	}, nil
+}
+
+func recoveryIncidentFromJSON(eventID, detailsJSON string) (*RecoveryIncident, error) {
+	var details struct {
+		LastKnownAliveAt time.Time `json:"lastKnownAliveAt"`
+		RecoveredAt      time.Time `json:"recoveredAt"`
+		DowntimeSeconds  int64     `json:"downtimeSeconds"`
+		Status           string    `json:"status"`
+		PreviousBootID   string    `json:"previousBootId"`
+		RecoveryBootID   string    `json:"recoveryBootId"`
+	}
+	if err := json.Unmarshal([]byte(detailsJSON), &details); err != nil {
+		return nil, fmt.Errorf("decode recovery incident: %w", err)
+	}
+	if eventID == "" || details.LastKnownAliveAt.IsZero() || details.RecoveredAt.IsZero() ||
+		details.DowntimeSeconds < 0 || details.Status != recoveryIncidentStatus ||
+		strings.TrimSpace(details.PreviousBootID) == "" ||
+		strings.TrimSpace(details.RecoveryBootID) == "" {
+		return nil, fmt.Errorf("decode recovery incident: invalid recovery details")
+	}
+	return &RecoveryIncident{
+		EventID: eventID, LastKnownAliveAt: details.LastKnownAliveAt.UTC(),
+		RecoveredAt: details.RecoveredAt.UTC(), DowntimeSeconds: details.DowntimeSeconds,
+		Status: details.Status, PreviousBootID: details.PreviousBootID,
+		RecoveryBootID: details.RecoveryBootID,
+	}, nil
+}
+
+func (q *QueryService) ListRecoveryIncidents(ctx context.Context, limit int) ([]RecoveryIncident, error) {
+	if limit < 1 || limit > 200 {
+		return nil, ErrInvalidRange
+	}
+	rows, err := q.store.db.QueryContext(ctx, `SELECT event_id, details_json
+		FROM events WHERE event_type = ? AND source = ? AND resource_type = ?
+		ORDER BY occurred_at_ms DESC, event_id DESC LIMIT ?`,
+		recoveryEventType, "reactorlab", "host", limit)
+	if err != nil {
+		return nil, fmt.Errorf("query recovery incidents: %w", err)
+	}
+	defer rows.Close()
+	incidents := make([]RecoveryIncident, 0)
+	for rows.Next() {
+		var eventID, detailsJSON string
+		if err := rows.Scan(&eventID, &detailsJSON); err != nil {
+			return nil, fmt.Errorf("scan recovery incident: %w", err)
+		}
+		incident, err := recoveryIncidentFromJSON(eventID, detailsJSON)
+		if err != nil {
+			return nil, err
+		}
+		incidents = append(incidents, *incident)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate recovery incidents: %w", err)
+	}
+	return incidents, nil
+}
+
+func (q *QueryService) RecoveryIncidentByID(ctx context.Context, eventID string) (*RecoveryIncident, error) {
+	if strings.TrimSpace(eventID) == "" {
+		return nil, ErrInvalidRange
+	}
+	row := q.store.db.QueryRowContext(ctx, `SELECT event_id, details_json
+		FROM events WHERE event_id = ? AND event_type = ? AND source = ? AND resource_type = ?`,
+		eventID, recoveryEventType, "reactorlab", "host")
+	var storedEventID, detailsJSON string
+	if err := row.Scan(&storedEventID, &detailsJSON); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("query recovery incident by ID: %w", err)
+	}
+	return recoveryIncidentFromJSON(storedEventID, detailsJSON)
+}
+
 func validateResolvedRange(window Range) error {
 	if err := ValidateWindow(window.From, window.To, window.MaxPoints); err != nil {
 		return err

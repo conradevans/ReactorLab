@@ -115,6 +115,24 @@ func (s *Store) migrate(ctx context.Context) error {
 		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at_ms) VALUES(?, ?)", 1, time.Now().UTC().UnixMilli()); err != nil {
 			return fmt.Errorf("record observability schema version: %w", err)
 		}
+		version = 1
+	}
+	if version < 2 {
+		if err := migrateV2(ctx, tx); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at_ms) VALUES(?, ?)", 2, time.Now().UTC().UnixMilli()); err != nil {
+			return fmt.Errorf("record observability schema version: %w", err)
+		}
+		version = 2
+	}
+	if version < 3 {
+		if err := migrateV3(ctx, tx); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, "INSERT INTO schema_migrations(version, applied_at_ms) VALUES(?, ?)", 3, time.Now().UTC().UnixMilli()); err != nil {
+			return fmt.Errorf("record observability schema version: %w", err)
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit observability migration: %w", err)
@@ -233,6 +251,38 @@ func migrateV1(ctx context.Context, tx *sql.Tx) error {
 	return nil
 }
 
+func migrateV2(ctx context.Context, tx *sql.Tx) error {
+	if _, err := tx.ExecContext(ctx, `CREATE INDEX events_type_occurred_at
+		ON events(event_type, occurred_at_ms)`); err != nil {
+		return fmt.Errorf("apply observability schema v2: %w", err)
+	}
+	return nil
+}
+
+func migrateV3(ctx context.Context, tx *sql.Tx) error {
+	statements := []string{
+		`CREATE TABLE recovery_discord_outbox (
+			event_id TEXT PRIMARY KEY REFERENCES events(event_id),
+			state TEXT NOT NULL CHECK(state IN ('pending', 'retry', 'sent')),
+			attempt_count INTEGER NOT NULL DEFAULT 0 CHECK(attempt_count >= 0),
+			next_attempt_at_ms INTEGER NOT NULL,
+			sent_at_ms INTEGER,
+			last_error TEXT NOT NULL DEFAULT '' CHECK(length(last_error) <= 512),
+			created_at_ms INTEGER NOT NULL,
+			CHECK((state = 'sent' AND sent_at_ms IS NOT NULL) OR
+				(state != 'sent' AND sent_at_ms IS NULL))
+		)`,
+		`CREATE INDEX recovery_discord_outbox_due
+			ON recovery_discord_outbox(state, next_attempt_at_ms, created_at_ms)`,
+	}
+	for _, statement := range statements {
+		if _, err := tx.ExecContext(ctx, statement); err != nil {
+			return fmt.Errorf("apply observability schema v3: %w", err)
+		}
+	}
+	return nil
+}
+
 func (s *Store) Close() error { return s.db.Close() }
 
 func (s *Store) InsertBatch(ctx context.Context, batch Batch) error {
@@ -299,8 +349,27 @@ func (s *Store) InsertBatch(ctx context.Context, batch Batch) error {
 		}
 	}
 	for _, event := range batch.Events {
-		if err := insertEvent(ctx, tx, event); err != nil {
+		if _, err := insertEvent(ctx, tx, event); err != nil {
 			return err
+		}
+	}
+	for _, recovery := range batch.Recoveries {
+		if recovery.Event.Type != recoveryEventType {
+			return errors.New("invalid recovery incident event")
+		}
+		inserted, err := insertEvent(ctx, tx, recovery.Event)
+		if err != nil {
+			return err
+		}
+		if recovery.Notify && inserted {
+			createdAt := time.Now().UTC().UnixMilli()
+			if _, err := tx.ExecContext(ctx, `INSERT INTO recovery_discord_outbox (
+				event_id, state, attempt_count, next_attempt_at_ms, sent_at_ms,
+				last_error, created_at_ms
+			) VALUES (?, 'pending', 0, ?, NULL, '', ?)`, recovery.Event.ID,
+				createdAt, createdAt); err != nil {
+				return fmt.Errorf("queue recovery Discord notification: %w", err)
+			}
 		}
 	}
 	updatedAt := time.Now().UTC().UnixMilli()
@@ -318,31 +387,35 @@ func (s *Store) InsertBatch(ctx context.Context, batch Batch) error {
 	return nil
 }
 
-func insertEvent(ctx context.Context, tx *sql.Tx, event Event) error {
+func insertEvent(ctx context.Context, tx *sql.Tx, event Event) (bool, error) {
 	if event.ID == "" || event.Source == "" || event.SourceEventID == "" || event.Type == "" || event.ResourceType == "" || event.OccurredAt.IsZero() || event.Summary == "" {
-		return errors.New("invalid observability event")
+		return false, errors.New("invalid observability event")
 	}
 	details := []byte("{}")
 	var err error
 	if len(event.Details) > 0 {
 		details, err = json.Marshal(event.Details)
 		if err != nil {
-			return fmt.Errorf("encode event details: %w", err)
+			return false, fmt.Errorf("encode event details: %w", err)
 		}
 	}
 	if len(details) > maxEventDetailsBytes {
-		return errors.New("event details exceed safe size")
+		return false, errors.New("event details exceed safe size")
 	}
-	_, err = tx.ExecContext(ctx, `INSERT OR IGNORE INTO events (
+	result, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO events (
 		event_id, source, source_event_id, event_type, resource_type,
 		resource_id, resource_name, occurred_at_ms, summary, details_json
 	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, event.ID, event.Source,
 		event.SourceEventID, event.Type, event.ResourceType, event.ResourceID,
 		event.ResourceName, event.OccurredAt.UTC().UnixMilli(), event.Summary, string(details))
 	if err != nil {
-		return fmt.Errorf("insert observability event: %w", err)
+		return false, fmt.Errorf("insert observability event: %w", err)
 	}
-	return nil
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("read observability event insert result: %w", err)
+	}
+	return rows == 1, nil
 }
 
 func (s *Store) State(ctx context.Context, key string) (string, bool, error) {

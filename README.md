@@ -12,6 +12,12 @@ per-application, and service metrics in a dedicated SQLite store. See
 intervals, schema behavior, bounded APIs, retention, security, and event-source
 limitations.
 
+## Recovery Discord delivery
+
+Durable unexpected-shutdown recovery Discord webhook configuration and
+secret-file requirements are documented in
+[Recovery Discord delivery](docs/recovery-discord.md).
+
 ## Guest resource aggregation
 
 ReactorLab's public Guest View is a read-only showcase of resources that the

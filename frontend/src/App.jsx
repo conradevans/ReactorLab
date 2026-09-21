@@ -15,21 +15,30 @@ import { resolveRoute } from "./routing"
 
 import "./App.css"
 
+function browserLocation() {
+  return {
+    pathname: window.location.pathname,
+    search: window.location.search,
+  }
+}
+
 export default function App() {
-  const [pathname, setPathname] = useState(() => window.location.pathname)
+  const [location, setLocation] = useState(browserLocation)
 
   useEffect(() => {
-    const handler = () => setPathname(window.location.pathname)
+    const handler = () => setLocation(browserLocation())
     window.addEventListener("popstate", handler)
     return () => window.removeEventListener("popstate", handler)
   }, [])
 
   const navigate = useCallback((path) => {
     window.history.pushState({}, "", path)
-    setPathname(path)
+    setLocation(browserLocation())
   }, [])
 
-  const route = resolveRoute(pathname)
+  const route = resolveRoute(location.pathname)
+  const activityEventID =
+    new URLSearchParams(location.search).get("event") || ""
 
   if (route.screen === "landing") return <LandingPage navigate={navigate} />
   if (route.screen === "guest") return <GuestPage navigate={navigate} />
@@ -37,7 +46,7 @@ export default function App() {
   if (route.screen === "activity") {
     return (
       <AdminShell active="activity" navigate={navigate}>
-        <ActivityPage />
+        <ActivityPage eventID={activityEventID} />
       </AdminShell>
     )
   }
@@ -45,7 +54,7 @@ export default function App() {
   if (route.screen === "overview") {
     return (
       <AdminShell active="overview" navigate={navigate}>
-        <OverviewPage />
+        <OverviewPage navigate={navigate} />
       </AdminShell>
     )
   }

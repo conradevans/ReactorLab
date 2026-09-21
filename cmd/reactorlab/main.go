@@ -79,9 +79,10 @@ func main() {
 	}()
 
 	var (
-		observabilityStore *observability.Store
-		observabilityQuery *observability.QueryService
-		observabilityDone  chan struct{}
+		observabilityStore  *observability.Store
+		observabilityQuery  *observability.QueryService
+		observabilityDone   chan struct{}
+		recoveryDiscordDone chan struct{}
 	)
 	observabilityStore, err = observability.Open(*observabilityPath)
 	if err != nil {
@@ -89,16 +90,50 @@ func main() {
 		observabilityStore = nil
 	} else {
 		observabilityQuery = observability.NewQueryService(observabilityStore)
+		recoveryDiscordConfig, recoveryDiscordConfigErr :=
+			observability.RecoveryDiscordConfigFromEnvironment()
+		if recoveryDiscordConfigErr != nil && !recoveryDiscordConfig.Enabled {
+			log.Print("warning: invalid recovery Discord configuration; notification creation disabled")
+		}
+		if recoveryDiscordConfig.TimezoneFallback {
+			log.Print("warning: invalid recovery notification timezone; using UTC")
+		}
 		collector := observability.NewCollector(observabilityStore, observability.CollectorConfig{
-			MiniDeployURL: *miniDeployURL,
-			MiniBaseURL:   *miniBaseURL,
-			MiniAIURL:     *miniAIURL,
+			MiniDeployURL:          *miniDeployURL,
+			MiniBaseURL:            *miniBaseURL,
+			MiniAIURL:              *miniAIURL,
+			RecoveryDiscordEnabled: recoveryDiscordConfig.Enabled,
 		})
 		observabilityDone = make(chan struct{})
 		go func() {
 			defer close(observabilityDone)
 			collector.Run(runContext)
 		}()
+
+		if recoveryDiscordConfig.Enabled {
+			var recoveryDiscordSender observability.RecoveryDiscordSender
+			if recoveryDiscordConfigErr == nil {
+				sender, senderErr := observability.NewDiscordWebhookSender(recoveryDiscordConfig)
+				if senderErr == nil {
+					recoveryDiscordSender = sender
+				} else {
+					recoveryDiscordConfigErr = senderErr
+				}
+			}
+			if recoveryDiscordConfigErr != nil {
+				log.Print("warning: recovery Discord delivery configuration unavailable; queued notifications will retry")
+			}
+			worker := observability.NewRecoveryDiscordWorker(
+				observabilityStore,
+				recoveryDiscordSender,
+				recoveryDiscordConfig.Location,
+			)
+			recoveryDiscordDone = make(chan struct{})
+			go func() {
+				defer close(recoveryDiscordDone)
+				worker.Run(runContext)
+			}()
+		}
 	}
 	accessValidator, err := accessauth.NewCloudflareValidator(
 		accessauth.ConfigFromEnvironment(),
@@ -188,6 +223,9 @@ func main() {
 
 	if observabilityDone != nil {
 		<-observabilityDone
+	}
+	if recoveryDiscordDone != nil {
+		<-recoveryDiscordDone
 	}
 	if observabilityStore != nil {
 		if err := observabilityStore.Close(); err != nil {

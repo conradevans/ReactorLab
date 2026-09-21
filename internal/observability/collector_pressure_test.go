@@ -344,4 +344,16 @@ func TestCollectorShutdownWithPendingProducersIsBoundedAndClosesAfterSenders(t *
 	case <-time.After(time.Second):
 		t.Fatal("collector shutdown exceeded bounded test deadline")
 	}
+
+	value, found, err := store.State(context.Background(), hostSessionStateKey)
+	if err != nil || !found {
+		t.Fatalf("clean host session found=%v err=%v", found, err)
+	}
+	session, err := decodeHostSession(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !session.CleanShutdown {
+		t.Fatalf("shutdown session = %#v, want clean", session)
+	}
 }

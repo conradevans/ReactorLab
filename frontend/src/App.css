@@ -1635,13 +1635,50 @@ code {
   background: #252a32;
 }
 
-.metric-lines > div {
+.metric-lines > div,
+.metric-lines > a {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 18px;
   padding: 14px 16px;
   background: #0d1014;
+}
+
+.metric-lines > a {
+  color: inherit;
+  text-decoration: none;
+  transition: background 160ms ease;
+}
+
+.metric-lines > a:hover,
+.metric-lines > a:focus-visible {
+  background: #14191f;
+}
+
+.system-health-link strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.recovery-warning {
+  color: #f7d584 !important;
+}
+
+.recovery-unavailable {
+  color: #7d8591 !important;
+}
+
+.recovery-link-arrow {
+  color: #707986 !important;
+  font-size: 12px !important;
+  letter-spacing: 0 !important;
+  transition: transform 160ms ease;
+}
+
+.system-health-link:hover .recovery-link-arrow {
+  transform: translateX(2px);
 }
 
 .metric-lines span,
@@ -2546,6 +2583,61 @@ code {
   line-height: 1.6;
 }
 
+
+.recovery-incident-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  margin: 12px 0 0;
+  border: 1px solid #252a32;
+  border-radius: 8px;
+  background: #252a32;
+}
+
+.recovery-incident-details > div {
+  min-width: 0;
+  padding: 10px 12px;
+  background: #0d1014;
+}
+
+.recovery-incident-details dt {
+  color: #707986;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.recovery-incident-details dd {
+  margin: 5px 0 0;
+  overflow-wrap: anywhere;
+  color: #c6cbd2;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.activity-row {
+  scroll-margin-block: 24px;
+  outline: 1px solid transparent;
+  outline-offset: -1px;
+  transition: background 220ms ease, outline-color 220ms ease;
+}
+
+.activity-row:focus {
+  outline-color: rgba(94, 224, 138, 0.35);
+}
+
+.activity-row.activity-row-selected {
+  background: rgba(94, 224, 138, 0.055);
+  outline-color: rgba(94, 224, 138, 0.28);
+}
+
+@media (max-width: 620px) {
+  .recovery-incident-details {
+    grid-template-columns: 1fr;
+  }
+}
 .activity-meta {
   display: flex;
   align-items: center;

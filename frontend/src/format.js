@@ -39,3 +39,28 @@ export function formatUptime(value) {
   if (hours > 0) return `${hours}h ${minutes}m`
   return `${minutes}m`
 }
+
+export function formatDuration(value) {
+  if (!Number.isFinite(value) || value < 0) return "—"
+
+  const totalSeconds = Math.floor(value)
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+
+  if (hours > 0) return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`
+  if (minutes > 0) return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`
+  return `${seconds}s`
+}
+
+export function formatCompactDate(value) {
+  if (!value) return "—"
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "—"
+
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  })
+}

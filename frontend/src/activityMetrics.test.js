@@ -11,6 +11,9 @@ describe("activity formatting", () => {
   it("formats kinds and sources", () => {
     expect(activityKindLabel("warning")).toBe("Warning")
     expect(activityKindLabel("recovery")).toBe("Recovered")
+    expect(activityKindLabel("unexpected_shutdown_recovery")).toBe(
+      "Recovery incident",
+    )
     expect(activitySourceLabel("minideploy")).toBe("MiniDeploy")
     expect(activitySourceLabel("minibase")).toBe("MiniBase")
     expect(activitySourceLabel("system")).toBe("Dell")

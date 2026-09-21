@@ -7,6 +7,8 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -37,32 +39,65 @@ type observabilitySource interface {
 	QueryApplication(context.Context, string, observability.Range) ([]observability.ApplicationPoint, error)
 	QueryServices(context.Context, observability.Range) ([]observability.ServiceSeries, error)
 	QueryEvents(context.Context, time.Time, time.Time, int) ([]observability.Event, error)
+	LatestRecoveryIncident(context.Context) (*observability.RecoveryIncident, error)
+	ListRecoveryIncidents(context.Context, int) ([]observability.RecoveryIncident, error)
+	RecoveryIncidentByID(context.Context, string) (*observability.RecoveryIncident, error)
+}
+
+type activityIncidentResponse struct {
+	LastKnownAliveAt time.Time `json:"lastKnownAliveAt"`
+	RecoveredAt      time.Time `json:"recoveredAt"`
+	DowntimeSeconds  int64     `json:"downtimeSeconds"`
+	Status           string    `json:"status"`
 }
 
 type activityEventResponse struct {
-	ID         int64     `json:"id"`
-	OccurredAt time.Time `json:"occurredAt"`
-	Source     string    `json:"source"`
-	Kind       string    `json:"kind"`
-	Severity   string    `json:"severity"`
-	Subject    string    `json:"subject"`
-	Message    string    `json:"message"`
+	ID         int64                     `json:"id,omitempty"`
+	EventID    string                    `json:"eventId,omitempty"`
+	OccurredAt time.Time                 `json:"occurredAt"`
+	Source     string                    `json:"source"`
+	Kind       string                    `json:"kind"`
+	Severity   string                    `json:"severity"`
+	Subject    string                    `json:"subject"`
+	Message    string                    `json:"message"`
+	Incident   *activityIncidentResponse `json:"incident,omitempty"`
 }
 
 type activityResponse struct {
 	Events []activityEventResponse `json:"events"`
 }
+type systemRecoveryIncidentResponse struct {
+	EventID          string    `json:"eventId"`
+	LastKnownAliveAt time.Time `json:"lastKnownAliveAt"`
+	RecoveredAt      time.Time `json:"recoveredAt"`
+	DowntimeSeconds  int64     `json:"downtimeSeconds"`
+	Status           string    `json:"status"`
+}
+
+type systemRecoveryResponse struct {
+	Protection       reactorsystem.RecoveryProtectionState `json:"protection"`
+	HistoryAvailable bool                                  `json:"historyAvailable"`
+	LastIncident     *systemRecoveryIncidentResponse       `json:"lastIncident"`
+}
+
+type adminSystemResponse struct {
+	reactorsystem.Metrics
+	Recovery systemRecoveryResponse `json:"recovery"`
+}
 
 type Handler struct {
-	mux             *http.ServeMux
-	frontendDir     string
-	miniDeploy      deploymentMetricsSource
-	miniBase        databaseMetricsSource
-	guestMiniDeploy guestDeploymentSource
-	guestMiniBase   guestDatabaseSource
-	activity        activitySource
-	observability   observabilitySource
-	access          accessauth.TokenValidator
+	mux                               *http.ServeMux
+	frontendDir                       string
+	miniDeploy                        deploymentMetricsSource
+	miniBase                          databaseMetricsSource
+	guestMiniDeploy                   guestDeploymentSource
+	guestMiniBase                     guestDatabaseSource
+	activity                          activitySource
+	observability                     observabilitySource
+	access                            accessauth.TokenValidator
+	collectSystem                     func() (reactorsystem.Metrics, error)
+	inspectHardwareWatchdogProtection func(context.Context) (reactorsystem.HardwareWatchdogProtectionState, error)
+	inspectRTCRecoveryProtection      func(context.Context) (reactorsystem.RTCRecoveryProtectionState, error)
 }
 
 func NewHandler(frontendDir string) http.Handler {
@@ -246,14 +281,17 @@ func newHandlerWithAllSourcesAndAccessAndGuestSources(
 	guestMiniBase guestDatabaseSource,
 ) http.Handler {
 	h := &Handler{
-		mux:             http.NewServeMux(),
-		frontendDir:     frontendDir,
-		miniDeploy:      miniDeploy,
-		miniBase:        miniBase,
-		guestMiniDeploy: guestMiniDeploy,
-		guestMiniBase:   guestMiniBase,
-		activity:        activity,
-		access:          access,
+		mux:                               http.NewServeMux(),
+		frontendDir:                       frontendDir,
+		miniDeploy:                        miniDeploy,
+		miniBase:                          miniBase,
+		guestMiniDeploy:                   guestMiniDeploy,
+		guestMiniBase:                     guestMiniBase,
+		activity:                          activity,
+		access:                            access,
+		collectSystem:                     reactorsystem.Collect,
+		inspectHardwareWatchdogProtection: reactorsystem.InspectHardwareWatchdogProtection,
+		inspectRTCRecoveryProtection:      reactorsystem.InspectRTCRecoveryProtection,
 	}
 
 	h.mux.HandleFunc("GET /health", h.health)
@@ -346,8 +384,12 @@ func (h *Handler) guestStatus(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
-func (h *Handler) adminSystem(w http.ResponseWriter, _ *http.Request) {
-	metrics, err := reactorsystem.Collect()
+func (h *Handler) adminSystem(w http.ResponseWriter, r *http.Request) {
+	collectSystem := h.collectSystem
+	if collectSystem == nil {
+		collectSystem = reactorsystem.Collect
+	}
+	metrics, err := collectSystem()
 	if err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
 			"error": "system_metrics_unavailable",
@@ -355,10 +397,128 @@ func (h *Handler) adminSystem(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, metrics)
+	inspectHardware := h.inspectHardwareWatchdogProtection
+	if inspectHardware == nil {
+		inspectHardware = reactorsystem.InspectHardwareWatchdogProtection
+	}
+	hardwareWatchdog, hardwareErr := inspectHardware(r.Context())
+	if hardwareErr != nil ||
+		!reactorsystem.ValidRecoveryProtectionState(hardwareWatchdog.State) {
+		hardwareWatchdog = reactorsystem.HardwareWatchdogProtectionState{
+			State: reactorsystem.RecoveryProtectionUnavailable,
+		}
+	}
+
+	inspectRTC := h.inspectRTCRecoveryProtection
+	if inspectRTC == nil {
+		inspectRTC = reactorsystem.InspectRTCRecoveryProtection
+	}
+	rtc, rtcErr := inspectRTC(r.Context())
+	if rtcErr != nil || !reactorsystem.ValidRecoveryProtectionState(rtc.State) {
+		rtc = reactorsystem.RTCRecoveryProtectionState{
+			State: reactorsystem.RecoveryProtectionUnavailable,
+		}
+	}
+
+	protection := reactorsystem.RecoveryProtectionState{
+		State: reactorsystem.AggregateRecoveryProtectionState(
+			hardwareWatchdog.State,
+			rtc.State,
+		),
+		HardwareWatchdog: hardwareWatchdog,
+		RTC:              rtc,
+	}
+	recovery := systemRecoveryResponse{Protection: protection}
+	if h.observability != nil {
+		incident, incidentErr := h.observability.LatestRecoveryIncident(r.Context())
+		if incidentErr == nil {
+			recovery.HistoryAvailable = true
+			if incident != nil {
+				recovery.LastIncident = &systemRecoveryIncidentResponse{
+					EventID:          incident.EventID,
+					LastKnownAliveAt: incident.LastKnownAliveAt,
+					RecoveredAt:      incident.RecoveredAt,
+					DowntimeSeconds:  incident.DowntimeSeconds,
+					Status:           incident.Status,
+				}
+			}
+		}
+	}
+
+	writeJSON(w, http.StatusOK, adminSystemResponse{
+		Metrics:  metrics,
+		Recovery: recovery,
+	})
+}
+
+const activityResultLimit = 100
+
+var recoveryActivityEventID = regexp.MustCompile(`^[0-9a-f]{64}$`)
+
+func requestedRecoveryEventID(r *http.Request) (string, bool) {
+	values, present := r.URL.Query()["event"]
+	if !present {
+		return "", true
+	}
+	if len(values) != 1 || !recoveryActivityEventID.MatchString(values[0]) {
+		return "", false
+	}
+	return values[0], true
+}
+
+func validRecoveryActivityIncident(incident observability.RecoveryIncident) bool {
+	return recoveryActivityEventID.MatchString(incident.EventID) &&
+		!incident.LastKnownAliveAt.IsZero() && !incident.RecoveredAt.IsZero() &&
+		incident.DowntimeSeconds >= 0 && incident.Status == "recovered"
+}
+
+func recoveryActivityResponse(incident observability.RecoveryIncident) activityEventResponse {
+	return activityEventResponse{
+		EventID:    incident.EventID,
+		OccurredAt: incident.RecoveredAt.UTC(),
+		Source:     "reactorlab",
+		Kind:       "unexpected_shutdown_recovery",
+		Severity:   "warning",
+		Subject:    "Unexpected shutdown detected",
+		Message:    "Dell host recovered after an unexpected shutdown.",
+		Incident: &activityIncidentResponse{
+			LastKnownAliveAt: incident.LastKnownAliveAt.UTC(),
+			RecoveredAt:      incident.RecoveredAt.UTC(),
+			DowntimeSeconds:  incident.DowntimeSeconds,
+			Status:           incident.Status,
+		},
+	}
+}
+
+func sortActivityResponses(events []activityEventResponse) {
+	sort.SliceStable(events, func(i, j int) bool {
+		if events[i].OccurredAt.Equal(events[j].OccurredAt) {
+			if events[i].EventID != events[j].EventID {
+				return events[i].EventID > events[j].EventID
+			}
+			return events[i].ID > events[j].ID
+		}
+		return events[i].OccurredAt.After(events[j].OccurredAt)
+	})
+}
+
+func activityContainsEventID(events []activityEventResponse, eventID string) bool {
+	for _, event := range events {
+		if event.EventID == eventID {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *Handler) adminActivity(w http.ResponseWriter, r *http.Request) {
+	requestedEventID, valid := requestedRecoveryEventID(r)
+	if !valid {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"error": "invalid_event",
+		})
+		return
+	}
 	if h.activity == nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
 			"error": "activity_unavailable",
@@ -366,7 +526,7 @@ func (h *Handler) adminActivity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	events, err := h.activity.ListActivity(r.Context(), 100)
+	legacyEvents, err := h.activity.ListActivity(r.Context(), activityResultLimit)
 	if err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{
 			"error": "activity_unavailable",
@@ -374,8 +534,8 @@ func (h *Handler) adminActivity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response := make([]activityEventResponse, 0, len(events))
-	for _, event := range events {
+	response := make([]activityEventResponse, 0, len(legacyEvents)+activityResultLimit)
+	for _, event := range legacyEvents {
 		response = append(response, activityEventResponse{
 			ID:         event.ID,
 			OccurredAt: event.OccurredAt,
@@ -385,6 +545,57 @@ func (h *Handler) adminActivity(w http.ResponseWriter, r *http.Request) {
 			Subject:    event.Subject,
 			Message:    event.Message,
 		})
+	}
+
+	var requestedEvent *activityEventResponse
+	seenRecovery := make(map[string]struct{})
+	appendRecovery := func(incident observability.RecoveryIncident) {
+		if !validRecoveryActivityIncident(incident) {
+			return
+		}
+		if _, seen := seenRecovery[incident.EventID]; seen {
+			return
+		}
+		seenRecovery[incident.EventID] = struct{}{}
+		event := recoveryActivityResponse(incident)
+		response = append(response, event)
+		if incident.EventID == requestedEventID {
+			requestedCopy := event
+			requestedEvent = &requestedCopy
+		}
+	}
+
+	if h.observability != nil {
+		incidents, incidentErr := h.observability.ListRecoveryIncidents(
+			r.Context(),
+			activityResultLimit,
+		)
+		if incidentErr == nil {
+			for _, incident := range incidents {
+				appendRecovery(incident)
+			}
+		}
+		if requestedEventID != "" && requestedEvent == nil {
+			incident, lookupErr := h.observability.RecoveryIncidentByID(
+				r.Context(),
+				requestedEventID,
+			)
+			if lookupErr == nil && incident != nil && incident.EventID == requestedEventID {
+				appendRecovery(*incident)
+			}
+		}
+	}
+
+	sortActivityResponses(response)
+	if len(response) > activityResultLimit {
+		response = response[:activityResultLimit]
+	}
+	if requestedEvent != nil && !activityContainsEventID(response, requestedEventID) {
+		if len(response) == activityResultLimit {
+			response = response[:activityResultLimit-1]
+		}
+		response = append(response, *requestedEvent)
+		sortActivityResponses(response)
 	}
 
 	writeJSON(w, http.StatusOK, activityResponse{Events: response})

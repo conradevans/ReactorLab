@@ -12,7 +12,14 @@ import (
 )
 
 type fakeObservability struct {
-	lastRange observability.Range
+	lastRange    observability.Range
+	latest       *observability.RecoveryIncident
+	latestErr    error
+	recoveries   []observability.RecoveryIncident
+	recoveryErr  error
+	recoveryByID *observability.RecoveryIncident
+	lookupErr    error
+	lookupID     string
 }
 
 func (f *fakeObservability) QueryHost(_ context.Context, window observability.Range) ([]observability.HostPoint, error) {
@@ -44,6 +51,18 @@ func (f *fakeObservability) QueryServices(_ context.Context, window observabilit
 func (f *fakeObservability) QueryEvents(_ context.Context, from, to time.Time, _ int) ([]observability.Event, error) {
 	f.lastRange = observability.Range{From: from, To: to}
 	return []observability.Event{}, nil
+}
+func (f *fakeObservability) LatestRecoveryIncident(context.Context) (*observability.RecoveryIncident, error) {
+	return f.latest, f.latestErr
+}
+
+func (f *fakeObservability) ListRecoveryIncidents(context.Context, int) ([]observability.RecoveryIncident, error) {
+	return f.recoveries, f.recoveryErr
+}
+
+func (f *fakeObservability) RecoveryIncidentByID(_ context.Context, eventID string) (*observability.RecoveryIncident, error) {
+	f.lookupID = eventID
+	return f.recoveryByID, f.lookupErr
 }
 
 func TestObservabilityHostRouteIsBoundedAndSafe(t *testing.T) {

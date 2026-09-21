@@ -53,27 +53,30 @@ type writerMessage struct {
 }
 
 type CollectorConfig struct {
-	MiniDeployURL string
-	MiniBaseURL   string
-	MiniAIURL     string
+	MiniDeployURL          string
+	MiniBaseURL            string
+	MiniAIURL              string
+	RecoveryDiscordEnabled bool
 }
 
 type Collector struct {
-	store           collectorStore
-	deployments     deploymentSource
-	activities      miniBaseActivitySource
-	health          *healthChecker
-	readHost        func(time.Time) (system.HistoricalSnapshot, error)
-	readTemperature func() (system.TemperatureStats, bool)
-	now             func() time.Time
-	hostTracker     HostTracker
-	appTracker      ApplicationTracker
-	serviceTracker  ServiceTracker
-	metricQueue     chan writerMessage
-	criticalQueue   chan writerMessage
-	retryDelay      time.Duration
-	errors          *errorReporter
-	intervals       collectorIntervals
+	store                  collectorStore
+	deployments            deploymentSource
+	activities             miniBaseActivitySource
+	health                 *healthChecker
+	readHost               func(time.Time) (system.HistoricalSnapshot, error)
+	readTemperature        func() (system.TemperatureStats, bool)
+	now                    func() time.Time
+	hostTracker            HostTracker
+	sessionTracker         HostSessionTracker
+	appTracker             ApplicationTracker
+	serviceTracker         ServiceTracker
+	metricQueue            chan writerMessage
+	criticalQueue          chan writerMessage
+	retryDelay             time.Duration
+	errors                 *errorReporter
+	intervals              collectorIntervals
+	recoveryDiscordEnabled bool
 }
 
 type collectorIntervals struct {
@@ -101,6 +104,7 @@ func NewCollector(store *Store, config CollectorConfig) *Collector {
 			temperatureBucket: TemperatureBucketInterval, applications: ApplicationInterval,
 			services: ServiceInterval, events: EventInterval, retention: RetentionInterval,
 		},
+		recoveryDiscordEnabled: config.RecoveryDiscordEnabled,
 	}
 }
 
@@ -134,11 +138,19 @@ func (c *Collector) Run(ctx context.Context) {
 	shutdownTimer := time.AfterFunc(writerShutdownTimeout, cancelWriter)
 	<-writerDone
 	shutdownTimer.Stop()
+	c.persistCleanShutdown()
 }
 
 func (c *Collector) loadBaselines(ctx context.Context) {
 	if bootID, ok, err := c.store.State(ctx, hostBootStateKey); err == nil && ok {
 		c.hostTracker.SetBootBaseline(bootID)
+	}
+	if value, ok, err := c.store.State(ctx, hostSessionStateKey); err != nil {
+		c.errors.report("host_session", "load host session failed", err)
+	} else if ok {
+		if err := c.sessionTracker.SetBaseline(value); err != nil {
+			c.errors.report("host_session", "invalid persisted host session ignored", err)
+		}
 	}
 	for _, service := range c.health.services {
 		if value, ok, err := c.store.State(ctx, serviceStatePrefix+service.id); err == nil && ok {
@@ -161,11 +173,53 @@ func (c *Collector) hostLoop(ctx context.Context) {
 			return
 		}
 		sample, events, state := c.hostTracker.Observe(snapshot)
-		c.enqueueMetric(writerMessage{batch: Batch{Hosts: []HostSample{sample}}})
-		if len(events) > 0 || len(state) > 0 {
-			c.enqueueCritical(ctx, writerMessage{batch: Batch{Events: events, State: state}})
+		session, sessionErr := c.sessionTracker.Observe(
+			snapshot.BootID,
+			snapshot.ObservedAt,
+			snapshot.UptimeSeconds,
+		)
+		if sessionErr != nil {
+			c.errors.report("host_session", "host recovery session observation was incomplete", sessionErr)
+		}
+		if session.StateValue != "" {
+			state[hostSessionStateKey] = session.StateValue
+		}
+		var recoveries []RecoveryIncidentWrite
+		if session.Event != nil {
+			recoveries = append(recoveries, RecoveryIncidentWrite{
+				Event:  *session.Event,
+				Notify: c.recoveryDiscordEnabled,
+			})
+		}
+		message := writerMessage{batch: Batch{
+			Hosts:      []HostSample{sample},
+			Events:     events,
+			Recoveries: recoveries,
+			State:      state,
+		}}
+		if session.Critical || len(events) > 0 || len(recoveries) > 0 {
+			c.enqueueCritical(ctx, message)
+		} else {
+			c.enqueueMetric(message)
 		}
 	})
+}
+func (c *Collector) persistCleanShutdown() {
+	value, ok, err := c.sessionTracker.MarkClean()
+	if err != nil {
+		c.errors.report("host_session_shutdown", "encode clean host session failed", err)
+		return
+	}
+	if !ok {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), writerOperationTimeout)
+	defer cancel()
+	if err := c.store.InsertBatch(ctx, Batch{
+		State: map[string]string{hostSessionStateKey: value},
+	}); err != nil {
+		c.errors.report("host_session_shutdown", "persist clean host session failed", err)
+	}
 }
 
 func (c *Collector) temperatureLoop(ctx context.Context) {

@@ -1,6 +1,7 @@
 export function activityKindLabel(kind) {
   if (kind === "warning") return "Warning"
   if (kind === "recovery") return "Recovered"
+  if (kind === "unexpected_shutdown_recovery") return "Recovery incident"
   return kind ? kind.charAt(0).toUpperCase() + kind.slice(1) : "Event"
 }
 
