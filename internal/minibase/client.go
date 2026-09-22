@@ -1,6 +1,7 @@
 package minibase
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -11,6 +12,8 @@ import (
 )
 
 const DefaultBaseURL = "http://127.0.0.1:9100"
+
+const maxDatabaseResponseBytes = 2 << 20
 
 type Client struct {
 	baseURL    string
@@ -126,6 +129,23 @@ func NewClient(baseURL string, timeout time.Duration) *Client {
 }
 
 func (c *Client) Databases(ctx context.Context) (Snapshot, error) {
+	return c.databases(ctx, false)
+}
+
+// ValidatedDatabases reads the existing ReactorLab observability endpoint with
+// the stricter field-presence and JSON-boundary checks required by the MiniAI
+// service contract. Databases retains its legacy null-list normalization for
+// the existing administrator API.
+func (c *Client) ValidatedDatabases(
+	ctx context.Context,
+) (Snapshot, error) {
+	return c.databases(ctx, true)
+}
+
+func (c *Client) databases(
+	ctx context.Context,
+	strict bool,
+) (Snapshot, error) {
 	req, err := http.NewRequestWithContext(
 		ctx,
 		http.MethodGet,
@@ -149,9 +169,74 @@ func (c *Client) Databases(ctx context.Context) (Snapshot, error) {
 		)
 	}
 
-	var snapshot Snapshot
-	if err := json.NewDecoder(resp.Body).Decode(&snapshot); err != nil {
+	if !strict {
+		var snapshot Snapshot
+		if err := json.NewDecoder(resp.Body).Decode(&snapshot); err != nil {
+			return Snapshot{}, fmt.Errorf(
+				"decode MiniBase observability: %w",
+				err,
+			)
+		}
+		if snapshot.Databases == nil {
+			snapshot.Databases = []Database{}
+		}
+		for index := range snapshot.Databases {
+			if snapshot.Databases[index].Attachments == nil {
+				snapshot.Databases[index].Attachments = []Attachment{}
+			}
+		}
+		return snapshot, nil
+	}
+
+	var envelope struct {
+		Databases   json.RawMessage `json:"databases"`
+		Postgres    json.RawMessage `json:"postgres"`
+		CollectedAt time.Time       `json:"collectedAt"`
+	}
+	if err := decodeBoundedJSON(
+		resp.Body,
+		maxDatabaseResponseBytes,
+		&envelope,
+	); err != nil {
 		return Snapshot{}, fmt.Errorf("decode MiniBase observability: %w", err)
+	}
+	if len(envelope.Databases) == 0 ||
+		string(envelope.Databases) == "null" ||
+		len(envelope.Postgres) == 0 ||
+		string(envelope.Postgres) == "null" ||
+		envelope.CollectedAt.IsZero() {
+
+		return Snapshot{}, fmt.Errorf(
+			"validate MiniBase observability: missing response fields",
+		)
+	}
+
+	snapshot := Snapshot{CollectedAt: envelope.CollectedAt}
+	if len(envelope.Databases) > 0 &&
+		string(envelope.Databases) != "null" {
+
+		if err := json.Unmarshal(
+			envelope.Databases,
+			&snapshot.Databases,
+		); err != nil {
+			return Snapshot{}, fmt.Errorf(
+				"decode MiniBase observability databases: %w",
+				err,
+			)
+		}
+	}
+	if len(envelope.Postgres) > 0 &&
+		string(envelope.Postgres) != "null" {
+
+		if err := json.Unmarshal(
+			envelope.Postgres,
+			&snapshot.Postgres,
+		); err != nil {
+			return Snapshot{}, fmt.Errorf(
+				"decode MiniBase observability postgres: %w",
+				err,
+			)
+		}
 	}
 
 	if snapshot.Databases == nil {
@@ -286,6 +371,25 @@ func ensureJSONEOF(decoder *json.Decoder) error {
 		return err
 	}
 	return nil
+}
+
+func decodeBoundedJSON(
+	reader io.Reader,
+	maximum int64,
+	target any,
+) error {
+	payload, err := io.ReadAll(io.LimitReader(reader, maximum+1))
+	if err != nil {
+		return err
+	}
+	if int64(len(payload)) > maximum {
+		return fmt.Errorf("response exceeds %d bytes", maximum)
+	}
+	decoder := json.NewDecoder(bytes.NewReader(payload))
+	if err := decoder.Decode(target); err != nil {
+		return err
+	}
+	return ensureJSONEOF(decoder)
 }
 
 func FindDatabase(snapshot Snapshot, id string) (Database, bool) {

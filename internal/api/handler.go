@@ -94,7 +94,10 @@ type Handler struct {
 	guestMiniBase                     guestDatabaseSource
 	activity                          activitySource
 	observability                     observabilitySource
+	miniAIDeploy                      miniAIDeploymentSource
+	miniAIBase                        miniAIDatabaseSource
 	access                            accessauth.TokenValidator
+	now                               func() time.Time
 	collectSystem                     func() (reactorsystem.Metrics, error)
 	inspectHardwareWatchdogProtection func(context.Context) (reactorsystem.HardwareWatchdogProtectionState, error)
 	inspectRTCRecoveryProtection      func(context.Context) (reactorsystem.RTCRecoveryProtectionState, error)
@@ -289,9 +292,16 @@ func newHandlerWithAllSourcesAndAccessAndGuestSources(
 		guestMiniBase:                     guestMiniBase,
 		activity:                          activity,
 		access:                            access,
+		now:                               func() time.Time { return time.Now().UTC() },
 		collectSystem:                     reactorsystem.Collect,
 		inspectHardwareWatchdogProtection: reactorsystem.InspectHardwareWatchdogProtection,
 		inspectRTCRecoveryProtection:      reactorsystem.InspectRTCRecoveryProtection,
+	}
+	if source, ok := miniDeploy.(miniAIDeploymentSource); ok {
+		h.miniAIDeploy = source
+	}
+	if source, ok := miniBase.(miniAIDatabaseSource); ok {
+		h.miniAIBase = source
 	}
 
 	h.mux.HandleFunc("GET /health", h.health)
@@ -305,6 +315,7 @@ func newHandlerWithAllSourcesAndAccessAndGuestSources(
 	h.mux.HandleFunc("GET /api/v1/databases", h.adminDatabases)
 	h.mux.HandleFunc("GET /api/v1/databases/{id}", h.adminDatabase)
 	h.mux.HandleFunc("GET /api/v1/activity", h.adminActivity)
+	h.registerMiniAIRoutes()
 	h.mux.HandleFunc("GET /", h.frontend)
 
 	return h
