@@ -2,6 +2,9 @@
 
 Last major handoff update: November 17, 2026
 
+Latest execution status: section 153 supersedes earlier phase/checkpoint status.
+Phase 4D1 is deployed with PARTIAL acceptance, not complete. Phase 4D2 is unstarted.
+
 This document is the canonical engineering handoff for the entire ReactorLab platform.
 
 It exists so that a new Codex session, coding agent, or engineer can understand:
@@ -4307,7 +4310,7 @@ That distinction is what should make ReactorLab both useful and trustworthy.
 
 ---
 
-# 152. Phase 4D1 Candidate Checkpoint — November 17, 2026
+# 152. Historical Phase 4D1 Candidate Checkpoint — November 17, 2026
 
 The documentation baseline `17e2c91c18ee3cfdb166d8904f0844b2d26aeea5` was
 pushed to `origin/main` before implementation.
@@ -4368,3 +4371,85 @@ READY FOR PRODUCTION VERIFICATION
 No implementation changed after its passing local verification. The exact
 remaining production steps are recorded in `PRODUCTION_VERIFICATION.md`.
 Phase 4D1 is not yet complete. Phase 4D2 remains unstarted.
+
+---
+
+# 153. Phase 4D1 Production Acceptance Checkpoint — November 17, 2026
+
+This section supersedes the execution boundary and current-status statements in
+section 152. The earlier text is preserved as handoff history, not an instruction
+to redeploy or repeat tests. Status: PARTIAL; Phase 4D1 is not marked complete.
+
+The user ran the password-protected deployment helper and explicitly authorized
+resuming bounded production acceptance. Deployed MiniAI implementation:
+
+```text
+87cd2968fefe5931e257ae6686acde4ccec24927
+Binary SHA-256:
+960406fa507f5aaf046e4d44313231dac11104896cf0bb1af76d4ba6f8565b76
+```
+
+The installed artifact, clean Dell source checkout at deployment, active service,
+and health were verified. Schema v4 migration preserved every existing
+proposal/event/History row hash and all five historical action fixtures. The
+deployment-time baseline was 5 proposals, 15 events, and 23 History entries;
+these are not permanent totals. Backup and prior binary remain under
+`/var/lib/miniai/phase4d1-87cd296`. Binary-only downgrade remains unsafe.
+
+Bounded live proofs:
+
+- Missing target `miniai-restart-canary-missing-4d1` was verified absent.
+  `action_34837674e3c5a8c38a90c852484419e3` became durable `failed` with
+  `upstream_rejected`, one start and one failure event. The public 502 response
+  contained gateway HTML; GET recovered the recorded result without retry.
+  Duplicate Execute returned 409 and changed no events. The real canary was
+  untouched during this test.
+- Four subsequent read-only investigations produced no assistant action: two
+  validated-answer rejections, one legacy/generic truncated answer, and one
+  canceled network stream. The validator failed closed. No proposal or History
+  link was fabricated to manufacture a live UI test.
+- The canary was restored using one ordinary authenticated direct-user proposal,
+  `action_9bf4f2176b9315bce25d727e2836f953`. Creation alone left it stopped;
+  separate Execute succeeded at `2026-11-17T19:59:32.168783111Z`. Execute and GET
+  matched. Duplicate Execute returned 409 without another event or restart.
+- The same container `be428f2dc3b843caa99e74ae7552871f4091a9ea9c4b5ac76e673411939b6204`
+  was running with start `2026-11-17T19:59:32.047913331Z`. Its verified loopback
+  port 8082 served the static `Healthy.` page. No replacement deployment occurred.
+- Browser reloads preserved both test actions, outcomes, categories, timestamps,
+  and event chains exactly. All five historical action/event responses remained
+  identical to their pre-test snapshots. Unauthenticated action GET returned 401.
+- API History totaled 27 entries, with exactly four new investigations, none
+  linked to an action. The two explicit test proposals account for six new
+  events: expected final table totals are 7 proposals / 21 events / 27 History.
+  A second protected-database integrity/full historical-hash check was requested
+  from the user; do not claim its result until received.
+
+Production ambiguity was intentionally not induced by disrupting MiniDeploy or
+networking. Strong passing integration coverage uses actual local post-dispatch
+response loss, database reopen, GET/History restoration, no mutation retry, and
+no causal inference from a currently running target. Automated frontend tests
+exercise unknown/failure/success reload and GET-only Refresh.
+
+The implementation's full Go, race, vet, syntax, whitespace, and Linux build
+checks passed before deployment. A post-live test-only addition reproduces the
+gateway HTML 502 and proves one Execute followed by GET, safe failure rendering,
+and no retry; all 9 frontend tests pass. No implementation changed after the
+deployed artifact's verification, so unchanged Go suites were not repeated.
+
+The exact fresh assistant suggestion -> Confirm only -> separate Execute -> UI
+reload live regression remains unproven. Earlier Phase 4C fixtures and automated
+confirmation/execution separation still pass, but the direct-user success is not
+misrepresented as that live proof. Investigate or explicitly review the observed
+model/stream reliability limitation before accepting Phase 4D1. No evidence
+validation, authentication, executor scope, or policy was weakened.
+
+Only MiniAI source/tests/documentation and ReactorLab platform documentation
+changed during Phase 4D1. MiniDeploy, MiniBase, and canary source are unchanged.
+The earlier unclassified-executor-error prerequisite defect was fixed in
+`87cd296`; the current model/stream reliability findings are not proven new
+4D1 implementation defects and were not used to expand into a reasoner redesign.
+Existing macOS/Linux portability debt remains recorded in `TESTING.md`.
+
+See `PRODUCTION_VERIFICATION.md` for evidence, fixture IDs, and remaining work.
+The authorized ceiling remains Phase 4D1. Phase 4D2 is proposed only after 4D1
+acceptance and fresh authorization; it has not started.

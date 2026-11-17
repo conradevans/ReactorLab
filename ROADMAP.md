@@ -30,12 +30,12 @@ Interactive confirmation/execution UI
 COMPLETE + LIVE PROVEN
 ```
 
-## Exact next milestone
+## Exact current milestone
 
 ```text
 Phase 4D1
 Action failure, ambiguity, reconciliation, and recovery hardening
-READY FOR PRODUCTION VERIFICATION / NOT YET COMPLETE
+DEPLOYED / PARTIAL ACCEPTANCE / NOT YET COMPLETE
 ```
 
 Primary repository: MiniAI. Dependencies: MiniDeploy restart and ReactorLab
@@ -53,12 +53,17 @@ Acceptance intent:
 - safe outcome, category, timing, and reconciliation facts are auditable;
 - bounded canary proof validates unhappy paths.
 
-Candidate commit `87cd2968fefe5931e257ae6686acde4ccec24927` implements durable
+Deployed commit `87cd2968fefe5931e257ae6686acde4ccec24927` implements durable
 outcomes and GET/History/UI restoration, with schema v4 migration and passing
-full Go, race, vet, and frontend tests. The overnight execution boundary
-deliberately stops before production writes. Remaining live acceptance steps
-are in [`PRODUCTION_VERIFICATION.md`](PRODUCTION_VERIFICATION.md).
-Phase 4D1 is not marked complete.
+full Go, race, vet, and frontend tests. Following explicit authorization, live
+definitive failure and direct-user canary restart passed. Four bounded read-only
+investigations produced no valid assistant proposal, so fresh assistant
+confirmation/execution live acceptance remains unproven. No validator or
+authentication bypass was introduced. The canary is healthy.
+Evidence and the remaining steps are in
+[`PRODUCTION_VERIFICATION.md`](PRODUCTION_VERIFICATION.md). Phase 4D1 is not
+marked complete. Phase 4D2 is the next proposed milestone only after 4D1 is
+accepted and new authorization is given; it has not started.
 
 ## Future roadmap
 
@@ -89,6 +94,8 @@ Phase 4D1 is not marked complete.
 - Fix MiniDeploy's macOS temporary-path assertion.
 - Add a Darwin-compatible MiniBase build boundary or explicitly require Linux.
 - Add a current MiniAI architecture/roadmap entry point.
+- Investigate bounded live model/stream reliability findings without weakening
+  evidence validation; these currently prevent fresh assistant-flow acceptance.
 
 These require separate authorization if implementation is involved.
 

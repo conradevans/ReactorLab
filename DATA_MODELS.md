@@ -51,8 +51,10 @@ History stores request/result identity and operational facts such as route,
 model, confidence, reads, reasoner calls, validation, token/timing facts, and
 errors. It is durable production evidence.
 
-MiniAI's production-known SQLite schema version is 3. The locally verified
-Phase 4D1 candidate introduces schema version 4; production migration is pending.
+MiniAI's deployed SQLite schema version is 4. The November 17, 2026 migration
+preserved all pre-existing proposal, event, and History row hashes: 5 proposals,
+15 events, and 23 History entries at deployment. These are historical baseline
+counts, not permanent totals; subsequent acceptance creates new records.
 Action proposals persist:
 
 - action ID, kind, origin, target, and typed arguments;
@@ -83,13 +85,13 @@ cancelled
 execution_started
 execution_succeeded
 execution_failed
-execution_outcome_unknown (Phase 4D1 candidate)
+execution_outcome_unknown
 ```
 
 Failure events store one closed, safe category. Raw upstream errors, local paths,
 credentials, and provider bodies are not action data.
 
-The v4 candidate adds an ambiguity event with `executing` as both source and
+Schema v4 adds an ambiguity event with `executing` as both source and
 destination state. Migration preserves all prior proposal and event values.
 Schema v3's event CHECK constraints require this small migration to represent
 ambiguity explicitly without falsely labeling it failure.

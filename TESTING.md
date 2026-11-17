@@ -3,7 +3,8 @@
 Status: audit results and expectations verified November 17, 2026.
 
 [`REACTORLAB_CONTEXT.md`](REACTORLAB_CONTEXT.md) remains the master narrative.
-This file does not claim production or live-Dell verification.
+Audit-era results and later authorized Phase 4D1 production checks are separated
+below. Unperformed checks are not claimed as passing.
 
 ## Audit test results
 
@@ -75,7 +76,7 @@ No production access, deployment, restart, or canary mutation occurred during
 the documentation audit. Live tests require explicit authorization, must prefer
 the canary, and must not weaken Cloudflare Access or delete historical records.
 
-## Phase 4D1 candidate verification
+## Phase 4D1 implementation verification
 
 MiniAI candidate `87cd2968fefe5931e257ae6686acde4ccec24927` passed:
 
@@ -83,7 +84,7 @@ MiniAI candidate `87cd2968fefe5931e257ae6686acde4ccec24927` passed:
 - `go test -race ./...`;
 - `go vet ./...`;
 - `node --test frontend_action_controls_test.js frontend_action_app_test.js`
-  (8 tests);
+  (8 tests at the implementation commit; 9 after the live gateway-error regression);
 - JavaScript syntax checks and `git diff --check`;
 - Linux amd64 cross-build from the clean committed source.
 
@@ -92,12 +93,25 @@ ambiguity/failure, Execute/GET/History parity, reopen, read-only reload/Refresh,
 completion races, duplicate execution, preserved v3 fixture identities and row
 hashes, and actual served frontend code exercised with a small DOM adapter.
 
-Production acceptance remains pending. Read-only Dell preflight confirmed the
-expected prior commit, healthy MiniAI, and a running canary. No deployment or
-canary mutation has occurred at this checkpoint; sudo requires user authentication.
+Production verification resumed with explicit user authorization after the
+overnight stop. The user performed the password-protected deployment; the
+candidate hash, active service, health, schema v4, and historical row hashes
+were verified. Live missing-target failure and direct-user restart success
+passed, including durable GET outcomes and duplicate 409/no additional events.
+The same canary container was left running and serving `Healthy.`.
 
-The overnight boundary subsequently required stopping before all production
-writes. The unchanged candidate is READY FOR PRODUCTION VERIFICATION; this does
-not mark live acceptance complete. See
-[`PRODUCTION_VERIFICATION.md`](PRODUCTION_VERIFICATION.md) for the remaining
-steps. Previously passing suites were not repeated without a code change.
+Four read-only investigations produced no assistant proposal: two validated
+answer rejections, one legacy/generic truncated answer, and one canceled stream.
+Consequently the fresh assistant -> Confirm -> Execute live regression remains
+unproven. Existing Phase 4C fixtures remain readable and automated separation,
+History restoration, failure/unknown UI, GET-only Refresh, and reload tests pass.
+This is PARTIAL acceptance, not a completed phase.
+
+Live ambiguity was not induced by disrupting production. The real local HTTP
+post-dispatch disconnect integration test remains the bounded ambiguity proof.
+The additional frontend regression simulates the observed HTML 502 response and
+asserts exactly one Execute POST followed by GET, a safe failed card, and no raw
+HTML rendering. All 9 frontend tests and the updated test's syntax check passed.
+Previously passing Go/race/vet suites were not rerun for a test-only change.
+See [`PRODUCTION_VERIFICATION.md`](PRODUCTION_VERIFICATION.md) for exact evidence
+and remaining verification.

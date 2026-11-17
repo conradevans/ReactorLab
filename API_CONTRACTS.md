@@ -51,7 +51,8 @@ bodies. Confirm never executes. Reload/reconciliation use GET only. Only a
 persisted, executable, authorized restart proposal can execute, and duplicates
 conflict.
 
-The Phase 4D1 candidate's Execute, action GET, and History action GET share:
+The deployed Phase 4D1 implementation's Execute, action GET, and History action
+GET share:
 
 ```text
 execution_outcome = succeeded | failed | outcome_unknown
@@ -59,14 +60,19 @@ failure_category  = upstream_unavailable | upstream_rejected |
                     timeout | invalid_response | internal_error
 ```
 
-The candidate also exposes `execution_started_at`, `execution_completed_at`
+The API also exposes `execution_started_at`, `execution_completed_at`
 (confirmed results only), and `outcome_recorded_at` when an outcome event exists.
 An `executing` action without a terminal event projects as `outcome_unknown`,
 including legacy interrupted dispatches. Explicit ambiguity is recorded by
 `execution_outcome_unknown`; GET never appends events or retries execution.
 Administrator responses use `Cache-Control: no-store`.
 
-These semantics passed local automated tests. Production verification is pending.
+These semantics passed automated tests. Live definitive failure and direct-user
+restart success persisted through GET; duplicate Execute requests returned 409.
+A gateway returned HTML for the live 502 response, so the origin JSON body was
+not verified through that intermediary. GET restored the durable failure;
+an additional frontend test verifies HTML-error reconciliation without retry.
+Fresh assistant-suggestion live acceptance remains unproven.
 
 ### MiniAI to MiniDeploy restart
 
@@ -113,7 +119,7 @@ attach/detach lifecycle routes to MiniBase.
 ## Future roadmap contracts
 
 Not implemented: a second executable action, preview lifecycle, MiniVault, or
-multi-node contracts. Phase 4D1's outcome projection is implemented locally;
-live acceptance is pending.
+multi-node contracts. Phase 4D1's outcome projection is deployed; its remaining
+live acceptance limitation is recorded in `PRODUCTION_VERIFICATION.md`.
 Future contracts must preserve bounded typed input, least privilege, explicit
 authorization, durable audit, and no blind retry.

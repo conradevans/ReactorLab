@@ -1,15 +1,78 @@
 # Phase 4D1 Production Verification
 
-Status: READY FOR PRODUCTION VERIFICATION. Local implementation and required
-checks passed. Phase 4D1 is not complete; Phase 4D2 has not started.
+Status: PARTIAL production acceptance, November 17, 2026. The implementation is
+deployed and the canary is healthy. Phase 4D1 is not marked complete; Phase 4D2
+has not started.
 
 ## Current execution boundary
 
-The user's overnight boundary requires stopping before deployment, replacing
-the production binary, restarting MiniAI, any live action/canary mutation, or
-any other production write. Do not execute this runbook until the user explicitly
-authorizes resuming production verification. The earlier request to run the
-staged deployment script is superseded by that boundary.
+The user explicitly resumed bounded production verification after running the
+password-protected deployment helper. This supersedes the earlier overnight
+stop. No authentication was weakened. Bounded mutations are now finished; do
+not repeat the reference procedure below just to reproduce this report.
+
+## Current verified production results
+
+- Dell checkout and installed binary matched implementation commit `87cd296`
+  and the SHA-256 below. MiniAI remained active with PID 619905 and healthy.
+- Schema migrated from v3 to v4. The user's deployment output confirmed SQLite
+  integrity/foreign-key checks and every pre-existing proposal/event/History row
+  hash were preserved, including all five historical action fixtures. Baseline
+  counts at deployment were 5 proposals / 15 events / 23 History entries.
+- Unauthenticated action GET returned 401; authenticated GET used `no-store`.
+- The missing target was independently verified absent before execution.
+  `action_34837674e3c5a8c38a90c852484419e3` became `failed`, with outcome
+  `failed`, category `upstream_rejected`, start `19:48:30.672077419Z`, completion
+  `19:48:30.673307051Z`, and three ordered events (policy, start, failure).
+  The public Execute request returned 502 with HTML rather than origin JSON;
+  GET recovered the durable result. A duplicate Execute returned 409 and changed
+  no action/event values. The real canary remained running and unchanged during
+  this test.
+- The canary was then stopped once for the assistant-flow regression. Four
+  investigations created no action: two validated-answer rejections, one
+  legacy/generic truncated answer, and one canceled network stream. No unsafe
+  proposal was fabricated and the evidence validator was not relaxed.
+- To leave the fixture healthy and verify the deployed success path, one normal
+  direct-user action was created: `action_9bf4f2176b9315bce25d727e2836f953`.
+  Creation left the canary stopped. Separate Execute returned 200 / `succeeded`,
+  start `19:59:32.014636274Z`, completion `19:59:32.168783111Z`, and three events
+  (policy, start, success). Execute and GET were identical. A duplicate returned
+  409 without changing events.
+- The same container `be428f2dc3b843caa99e74ae7552871f4091a9ea9c4b5ac76e673411939b6204`
+  was running with new start `2026-11-17T19:59:32.047913331Z`; its actual loopback
+  port 8082 returned the static `MiniAI Restart Canary` / `Healthy.` page.
+- API History contained 27 entries with no further page: precisely four new
+  investigations. All four had zero actions. The two explicit test actions add
+  six events; expected final table totals are therefore 7 proposals / 21 events /
+  27 History entries, subject to the protected-database final check below.
+- Historical action/event GET snapshots matched exactly after the live tests.
+  No historical fixture was deleted or normalized.
+- Both new test records were opened and reloaded in the browser. Subsequent
+  authenticated GET comparisons showed identical action values and event chains;
+  the canary's start timestamp did not change.
+
+## Remaining acceptance and explicit limitations
+
+1. A fresh assistant suggestion -> Confirm only (still stopped) -> separate
+   Execute -> successful UI reload live sequence remains unproven. Automated
+   coverage and earlier Phase 4C historical evidence are intact, but the live
+   direct-user test is not a substitute for this exact sequence. Resolve or
+   explicitly review the model/stream reliability limitation before marking
+   Phase 4D1 complete. Do not silently broaden the phase into a reasoner redesign.
+2. The final protected-database read-only hash/integrity check was requested from
+   the user because sudo requires their password. Deployment-time full hashes
+   passed; subsequent API comparisons cover all five existing actions/events.
+   Do not claim a second full database hash check until its output is received:
+
+   ```sh
+   ssh -t mini-server 'sudo python3 /tmp/miniai-phase4d1-87cd296/audit.py after'
+   ```
+
+Ambiguity was intentionally not induced live: there is no safe deterministic
+production fixture, and disrupting MiniDeploy/networking would create needless
+risk. Passing local integration tests cover real post-dispatch response loss,
+database reopen, GET/History/UI restoration, no repeated POST, and no inference
+of causation from a running target. Unknown may remain unknown permanently.
 
 ## Verified candidate
 
@@ -28,7 +91,7 @@ Local validation passed against this implementation:
 - full MiniAI `go test -race ./...`;
 - `go vet ./...`;
 - `node --test frontend_action_controls_test.js frontend_action_app_test.js`
-  (8 tests);
+  (8 tests at implementation commit; 9 after the gateway-error regression);
 - JavaScript syntax checks and `git diff --check`;
 - Linux cross-build with the candidate revision and `vcs.modified=false`.
 
@@ -38,7 +101,12 @@ safe error serialization, migration preservation, and the unchanged closed
 executor catalog. An unclassified executor error no longer falsely establishes
 definitive failure; it conservatively records unknown.
 
-## Remaining production steps
+## Reference procedure from the pre-deployment handoff
+
+This records the original procedure, not an instruction to repeat completed
+deployment or mutation steps. Current results and the actual remaining work
+are above. The implementation binary has not changed after deployment; the
+follow-up change adds only a frontend regression test and documentation.
 
 ### 1. Revalidate the deployment target
 

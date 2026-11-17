@@ -58,11 +58,12 @@ Repository presence does not authorize unrelated edits.
 
 ## Phase 4D1 impact map
 
-Phase 4D1 has not begun. MiniAI is the primary repository. MiniDeploy is the
-authoritative restart dependency and should change only if the current contract
-cannot safely satisfy the milestone. ReactorLab evidence may support
-current-state observation, but no change is yet proven necessary. The canary is
-the live fixture. MiniBase is outside the milestone.
+Phase 4D1 implementation and tests changed MiniAI; platform documentation changed
+ReactorLab. MiniDeploy's existing typed restart contract was sufficient and its
+source is unchanged. The disposable canary was stopped and restarted for bounded
+acceptance; its source is unchanged. MiniBase is outside the milestone and
+unchanged. Production acceptance is partial, not phase completion; see
+`PRODUCTION_VERIFICATION.md`.
 
 ## Future repositories
 

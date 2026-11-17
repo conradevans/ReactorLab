@@ -62,8 +62,10 @@ executor; catalog entries for rollback and deploy are not executable.
 
 The executor persists `executing` before calling MiniDeploy and never retries
 after dispatch. Definitive pre-mutation rejection can become `failed`.
-Transport or response ambiguity leaves the action `executing` and returns a
-transient `outcome_unknown`.
+Transport or response ambiguity leaves the action `executing`, records
+`execution_outcome_unknown`, and projects durable `outcome_unknown` through
+Execute, GET, History, and reload. An interrupted legacy execution without an
+outcome event is also conservatively projected as unknown.
 
 ### Current persistence and deployment
 
@@ -71,8 +73,8 @@ transient `outcome_unknown`.
 - MiniDeploy stores deployment metadata, exact source identity, history, and logs.
 - MiniBase stores non-secret metadata in SQLite and application data in a
   private PostgreSQL service with per-project databases and roles.
-- MiniAI's Phase 4D1 candidate stores chats, History, proposals, and events in
-  SQLite schema version 4. Production migration is pending verification.
+- MiniAI stores chats, History, proposals, and events in SQLite schema version 4.
+  The Phase 4D1 implementation is deployed; migration preserved historical rows.
 - Passwords and other secrets are not stored in ordinary metadata records.
 
 The Dell is the production node. Services bind to loopback origins; public
@@ -83,9 +85,10 @@ There is no current multi-node scheduler, consensus layer, or service mesh.
 
 ## Known current limitations
 
-- The Phase 4D1 candidate durably records ambiguity and restores execution
-  outcomes, categories, and timestamps through GET/History. Local tests pass;
-  production acceptance remains pending.
+- Phase 4D1 durably records ambiguity and restores execution outcomes,
+  categories, and timestamps through GET/History. Automated tests and bounded
+  live failure/direct-user success checks pass. Fresh assistant-suggestion
+  live acceptance remains unproven; see `PRODUCTION_VERIFICATION.md`.
 - MiniDeploy restart has no durable operation identity proving causation.
 - Same-Dell backups do not protect against physical storage loss.
 - Some Linux-specific code/tests do not run cleanly on the Mac; see
@@ -93,8 +96,8 @@ There is no current multi-node scheduler, consensus layer, or service mesh.
 
 ## Future roadmap architecture
 
-Phase 4D1 has a locally verified implementation candidate, with production
-verification pending. Planned later: 4D2 recovery UX; 4D3 a second action;
+Phase 4D1 is deployed but not marked complete. Planned later: 4D2 recovery UX;
+4D3 a second action;
 previews; Git-backed source editing;
 controlled web research; evaluation; expanded observability; self-healing;
 MiniBase object storage; MiniVault; specialized least-privilege agents;

@@ -70,22 +70,23 @@ On conflict, network ambiguity, no status, server error, or unexpected response,
 the browser reconciles with GET and does not resend mutation. Duplicate Execute
 requests are rejected by persisted state.
 
-The Phase 4D1 candidate preserves `outcome_unknown`, safe categories, and audit
-timestamps through GET/reload. The lifecycle state remains `executing` until an
+The deployed Phase 4D1 implementation preserves `outcome_unknown`, safe
+categories, and audit timestamps through GET/reload. The lifecycle state remains `executing` until an
 authoritative result exists. Observing an application running does not prove the
 restart caused it. GET refresh performs no writes or redispatch.
 
-Production deployment is deliberately deferred by the overnight execution
-boundary. Fresh authorization and administrator authentication are required to
-resume. The reviewed
-candidate is MiniAI commit `87cd2968fefe5931e257ae6686acde4ccec24927`. Its v4
-migration requires a consistent pre-deployment SQLite backup plus the prior
-binary. After migration, do not attempt a binary-only downgrade. Do not restore
-an old backup over later History/action activity without preserving that activity.
+The user explicitly resumed production verification after the overnight stop
+and ran the guarded sudo deployment. The deployed implementation is MiniAI
+commit `87cd2968fefe5931e257ae6686acde4ccec24927`. Schema v4 migration and health
+checks passed. The consistent pre-deployment database backup, old binary, and
+historical hashes are retained under `/var/lib/miniai/phase4d1-87cd296`.
+After migration, do not attempt a binary-only downgrade. Do not restore an old
+backup over later History/action activity without preserving that activity.
 
-The exact remaining steps are in
-[`PRODUCTION_VERIFICATION.md`](PRODUCTION_VERIFICATION.md). Do not run the
-previously staged deployment helper during the overnight run.
+The disposable canary is running and healthy after one typed direct-user restart.
+Do not rerun the deployment helper or acceptance mutations merely to reproduce
+the report. Results and the remaining assistant-suggestion acceptance limitation
+are in [`PRODUCTION_VERIFICATION.md`](PRODUCTION_VERIFICATION.md).
 
 ## Recovery
 
