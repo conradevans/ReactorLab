@@ -35,7 +35,7 @@ COMPLETE + LIVE PROVEN
 ```text
 Phase 4D1
 Action failure, ambiguity, reconciliation, and recovery hardening
-NOT STARTED
+IMPLEMENTED CANDIDATE / LOCAL TESTS PASS / PRODUCTION ACCEPTANCE PENDING
 ```
 
 Primary repository: MiniAI. Dependencies: MiniDeploy restart and ReactorLab
@@ -53,8 +53,10 @@ Acceptance intent:
 - safe outcome, category, timing, and reconciliation facts are auditable;
 - bounded canary proof validates unhappy paths.
 
-The current code has groundwork but does not restore ambiguity or failure
-details through normal GET/reload.
+Candidate commit `87cd2968fefe5931e257ae6686acde4ccec24927` implements durable
+outcomes and GET/History/UI restoration, with schema v4 migration and passing
+full Go, race, vet, and frontend tests. Production deployment and live acceptance
+remain pending administrator authentication. Phase 4D1 is not marked complete.
 
 ## Future roadmap
 
@@ -90,11 +92,12 @@ These require separate authorization if implementation is involved.
 
 ## Authorization rule
 
-The work that created this file was authorized only for:
+The original documentation baseline was authorized only for audit/documentation.
+The subsequent implementation task explicitly authorized:
 
 ```text
-AUDIT / DOCUMENTATION ONLY
+Phase 4D1
 ```
 
-No Phase 4D1 implementation, production access, deployment, or live mutation
-was authorized or performed. Documentation completion grants no later authority.
+This authorization does not include Phase 4D2 or later. Completion of Phase 4D1
+requires a stop and user review before any later implementation.

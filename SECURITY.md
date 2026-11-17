@@ -75,7 +75,8 @@ unsafe proposals and failed investigations remain audit evidence.
 
 - The Dell is a single-node trust domain.
 - MiniVault does not exist; current services protect their own secret files.
-- Ambiguous action outcomes are not durably labeled for later GET/reload.
+- The Phase 4D1 candidate durably labels ambiguous action outcomes, with local
+  verification complete and production acceptance pending.
 - MiniDeploy restart has no durable operation ID for causal proof.
 - Same-Dell backups do not protect against physical storage loss.
 

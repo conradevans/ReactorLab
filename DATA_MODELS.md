@@ -51,7 +51,9 @@ History stores request/result identity and operational facts such as route,
 model, confidence, reads, reasoner calls, validation, token/timing facts, and
 errors. It is durable production evidence.
 
-MiniAI's production-known SQLite schema version is 3. Action proposals persist:
+MiniAI's production-known SQLite schema version is 3. The locally verified
+Phase 4D1 candidate introduces schema version 4; production migration is pending.
+Action proposals persist:
 
 - action ID, kind, origin, target, and typed arguments;
 - safety and policy decisions;
@@ -81,14 +83,22 @@ cancelled
 execution_started
 execution_succeeded
 execution_failed
+execution_outcome_unknown (Phase 4D1 candidate)
 ```
 
 Failure events store one closed, safe category. Raw upstream errors, local paths,
 credentials, and provider bodies are not action data.
 
-Current limitation: there is no durable `outcome_unknown` event or proposal
-field. Ambiguous execution stays `executing`, and its transient details are not
-reconstructed after reload.
+The v4 candidate adds an ambiguity event with `executing` as both source and
+destination state. Migration preserves all prior proposal and event values.
+Schema v3's event CHECK constraints require this small migration to represent
+ambiguity explicitly without falsely labeling it failure.
+
+Outcomes, categories, and timestamps are derived from validated audit chains.
+An interrupted legacy `executing` action projects as unknown without an invented
+category or completion time. Refresh reads this projection and writes no events.
+The old v3 binary cannot open v4: deployment must preserve a consistent backup,
+and binary-only rollback after migration is insufficient.
 
 ### Restart canary
 
@@ -106,7 +116,7 @@ deliberately deterministic.
 
 ## Future roadmap models
 
-Not implemented: durable reconciliation/post-action observations, preview
+Not implemented: persisted post-action target observations, preview
 identity, Git-backed source changes, object storage, MiniVault identities and
 rotation, agent capability grants, platform restore manifests, or multi-node
 identity/placement.

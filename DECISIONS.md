@@ -34,8 +34,9 @@ separate request executes. Reload performs neither.
 
 ### ADR-007: Ambiguous mutations are not automatically retried
 
-Accepted and implemented for restart dispatch. Current durable ambiguity and
-reconciliation remain incomplete and belong to Phase 4D1.
+Accepted and implemented for restart dispatch. The Phase 4D1 candidate adds an
+explicit durable ambiguity event and GET-only reconciliation, pending production
+acceptance. Unknown outcomes remain unknown without authoritative causal proof.
 
 ### ADR-008: Current evidence is required for restart eligibility
 

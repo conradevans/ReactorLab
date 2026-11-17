@@ -75,9 +75,23 @@ No production access, deployment, restart, or canary mutation occurred during
 the documentation audit. Live tests require explicit authorization, must prefer
 the canary, and must not weaken Cloudflare Access or delete historical records.
 
-## Future Phase 4D1 testing
+## Phase 4D1 candidate verification
 
-Planned, not implemented: definitive failure persistence; ambiguity across
-reload; GET-only reconciliation without retry; current-state versus causal
-outcome assertions; duplicate Execute concurrency; safe category serialization;
-schema/process-reopen coverage; and bounded live canary proof.
+MiniAI candidate `87cd2968fefe5931e257ae6686acde4ccec24927` passed:
+
+- `go test -count=1 ./...`;
+- `go test -race ./...`;
+- `go vet ./...`;
+- `node --test frontend_action_controls_test.js frontend_action_app_test.js`
+  (8 tests);
+- JavaScript syntax checks and `git diff --check`;
+- Linux amd64 cross-build from the clean committed source.
+
+New coverage includes real local HTTP disconnect after dispatch, durable
+ambiguity/failure, Execute/GET/History parity, reopen, read-only reload/Refresh,
+completion races, duplicate execution, preserved v3 fixture identities and row
+hashes, and actual served frontend code exercised with a small DOM adapter.
+
+Production acceptance remains pending. Read-only Dell preflight confirmed the
+expected prior commit, healthy MiniAI, and a running canary. No deployment or
+canary mutation has occurred at this checkpoint; sudo requires user authentication.

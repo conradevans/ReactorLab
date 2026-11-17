@@ -4304,3 +4304,49 @@ unrestricted authority
 ```
 
 That distinction is what should make ReactorLab both useful and trustworthy.
+
+---
+
+# 152. Phase 4D1 Candidate Checkpoint — November 17, 2026
+
+The documentation baseline `17e2c91c18ee3cfdb166d8904f0844b2d26aeea5` was
+pushed to `origin/main` before implementation.
+
+MiniAI candidate commit:
+
+```text
+87cd2968fefe5931e257ae6686acde4ccec24927
+fix: harden action failure and reconciliation
+```
+
+Phase 4D1 is implemented locally but is NOT COMPLETE. Production deployment
+and live acceptance remain pending administrator authentication. The Dell was
+checked read-only and still runs the prior `b55e4a2` baseline. Sudo requires a
+password. A verified candidate and guarded backup/install helpers are staged
+privately under `/tmp/miniai-phase4d1-87cd296`; no service restart, production
+database migration, or live canary mutation has occurred at this checkpoint.
+
+Durable design facts in the candidate:
+
+- SQLite schema v4 adds `execution_outcome_unknown` while preserving existing
+  proposals and event values. A migration is needed because v3 CHECK constraints
+  cannot represent the event.
+- Unknown execution remains lifecycle state `executing`; the API and UI report
+  `outcome_unknown`, including legacy interrupted dispatches.
+- Execute, GET, and History share the same audit-derived outcome, safe failure
+  category, and execution timestamps.
+- Refresh is GET-only and writes no events. Current target state never proves
+  restart causation. There is no automatic retry or new executor.
+- Unclassified executor errors formerly claimed definitive failure; this direct
+  prerequisite defect now conservatively yields unknown, with regression coverage.
+- The old v3 binary cannot open a v4 database. Preserve a consistent database
+  backup and prior binary before installation; do not overwrite later audit
+  activity during any reviewed rollback.
+
+Local validation passed: full MiniAI tests, race tests, vet, eight frontend
+tests, JavaScript syntax checks, whitespace checks, and Linux amd64 cross-build.
+Tests include a real local post-dispatch disconnect, migration preservation,
+reopen/History parity, actual served UI restoration, GET-only Refresh, and
+duplicate-execution rejection. Other implementation repositories are unchanged.
+
+The authorized ceiling remains Phase 4D1. Phase 4D2 has not started.

@@ -51,7 +51,7 @@ bodies. Confirm never executes. Reload/reconciliation use GET only. Only a
 persisted, executable, authorized restart proposal can execute, and duplicates
 conflict.
 
-The immediate Execute response may include:
+The Phase 4D1 candidate's Execute, action GET, and History action GET share:
 
 ```text
 execution_outcome = succeeded | failed | outcome_unknown
@@ -59,8 +59,14 @@ failure_category  = upstream_unavailable | upstream_rejected |
                     timeout | invalid_response | internal_error
 ```
 
-Current limitation: normal GET does not reconstruct these transient fields, and
-ambiguity has no durable event.
+The candidate also exposes `execution_started_at`, `execution_completed_at`
+(confirmed results only), and `outcome_recorded_at` when an outcome event exists.
+An `executing` action without a terminal event projects as `outcome_unknown`,
+including legacy interrupted dispatches. Explicit ambiguity is recorded by
+`execution_outcome_unknown`; GET never appends events or retries execution.
+Administrator responses use `Cache-Control: no-store`.
+
+These semantics passed local automated tests. Production verification is pending.
 
 ### MiniAI to MiniDeploy restart
 
@@ -106,7 +112,8 @@ attach/detach lifecycle routes to MiniBase.
 
 ## Future roadmap contracts
 
-Not implemented: durable Phase 4D1 reconciliation/outcome APIs, a second
-executable action, preview lifecycle, MiniVault, or multi-node contracts.
+Not implemented: a second executable action, preview lifecycle, MiniVault, or
+multi-node contracts. Phase 4D1's outcome projection is implemented locally;
+live acceptance is pending.
 Future contracts must preserve bounded typed input, least privilege, explicit
 authorization, durable audit, and no blind retry.

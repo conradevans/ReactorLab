@@ -70,9 +70,16 @@ On conflict, network ambiguity, no status, server error, or unexpected response,
 the browser reconciles with GET and does not resend mutation. Duplicate Execute
 requests are rejected by persisted state.
 
-Current limitation: ambiguous execution remains `executing`, while normal GET
-does not preserve the transient `outcome_unknown`. Observing an application
-running does not prove the restart caused it.
+The Phase 4D1 candidate preserves `outcome_unknown`, safe categories, and audit
+timestamps through GET/reload. The lifecycle state remains `executing` until an
+authoritative result exists. Observing an application running does not prove the
+restart caused it. GET refresh performs no writes or redispatch.
+
+Production deployment is pending administrator authentication. The reviewed
+candidate is MiniAI commit `87cd2968fefe5931e257ae6686acde4ccec24927`. Its v4
+migration requires a consistent pre-deployment SQLite backup plus the prior
+binary. After migration, do not attempt a binary-only downgrade. Do not restore
+an old backup over later History/action activity without preserving that activity.
 
 ## Recovery
 
@@ -90,6 +97,6 @@ See [`TESTING.md`](TESTING.md).
 
 ## Future operations
 
-Not implemented: durable Phase 4D1 reconciliation, off-Dell recovery,
+Not implemented: off-Dell recovery,
 MiniVault rotation/revocation, installer/upgrade automation, or multi-node
 placement and recovery.
