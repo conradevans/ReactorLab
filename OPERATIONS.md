@@ -75,11 +75,17 @@ timestamps through GET/reload. The lifecycle state remains `executing` until an
 authoritative result exists. Observing an application running does not prove the
 restart caused it. GET refresh performs no writes or redispatch.
 
-Production deployment is pending administrator authentication. The reviewed
+Production deployment is deliberately deferred by the overnight execution
+boundary. Fresh authorization and administrator authentication are required to
+resume. The reviewed
 candidate is MiniAI commit `87cd2968fefe5931e257ae6686acde4ccec24927`. Its v4
 migration requires a consistent pre-deployment SQLite backup plus the prior
 binary. After migration, do not attempt a binary-only downgrade. Do not restore
 an old backup over later History/action activity without preserving that activity.
+
+The exact remaining steps are in
+[`PRODUCTION_VERIFICATION.md`](PRODUCTION_VERIFICATION.md). Do not run the
+previously staged deployment helper during the overnight run.
 
 ## Recovery
 

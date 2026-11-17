@@ -35,7 +35,7 @@ COMPLETE + LIVE PROVEN
 ```text
 Phase 4D1
 Action failure, ambiguity, reconciliation, and recovery hardening
-IMPLEMENTED CANDIDATE / LOCAL TESTS PASS / PRODUCTION ACCEPTANCE PENDING
+READY FOR PRODUCTION VERIFICATION / NOT YET COMPLETE
 ```
 
 Primary repository: MiniAI. Dependencies: MiniDeploy restart and ReactorLab
@@ -55,8 +55,10 @@ Acceptance intent:
 
 Candidate commit `87cd2968fefe5931e257ae6686acde4ccec24927` implements durable
 outcomes and GET/History/UI restoration, with schema v4 migration and passing
-full Go, race, vet, and frontend tests. Production deployment and live acceptance
-remain pending administrator authentication. Phase 4D1 is not marked complete.
+full Go, race, vet, and frontend tests. The overnight execution boundary
+deliberately stops before production writes. Remaining live acceptance steps
+are in [`PRODUCTION_VERIFICATION.md`](PRODUCTION_VERIFICATION.md).
+Phase 4D1 is not marked complete.
 
 ## Future roadmap
 

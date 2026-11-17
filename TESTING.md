@@ -95,3 +95,9 @@ hashes, and actual served frontend code exercised with a small DOM adapter.
 Production acceptance remains pending. Read-only Dell preflight confirmed the
 expected prior commit, healthy MiniAI, and a running canary. No deployment or
 canary mutation has occurred at this checkpoint; sudo requires user authentication.
+
+The overnight boundary subsequently required stopping before all production
+writes. The unchanged candidate is READY FOR PRODUCTION VERIFICATION; this does
+not mark live acceptance complete. See
+[`PRODUCTION_VERIFICATION.md`](PRODUCTION_VERIFICATION.md) for the remaining
+steps. Previously passing suites were not repeated without a code change.

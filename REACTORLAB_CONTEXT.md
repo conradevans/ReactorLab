@@ -4350,3 +4350,21 @@ reopen/History parity, actual served UI restoration, GET-only Refresh, and
 duplicate-execution rejection. Other implementation repositories are unchanged.
 
 The authorized ceiling remains Phase 4D1. Phase 4D2 has not started.
+
+## Superseding overnight execution boundary
+
+The user subsequently authorized local Phase 4D1 work only and explicitly
+required stopping before deployment, binary replacement, service restart,
+live action/canary mutation, or any other production write. This supersedes the
+earlier request to execute the staged deployment helper. Do not run it until
+the user authorizes resuming production verification.
+
+The clean MiniAI candidate `87cd2968fefe5931e257ae6686acde4ccec24927` is:
+
+```text
+READY FOR PRODUCTION VERIFICATION
+```
+
+No implementation changed after its passing local verification. The exact
+remaining production steps are recorded in `PRODUCTION_VERIFICATION.md`.
+Phase 4D1 is not yet complete. Phase 4D2 remains unstarted.
