@@ -62,11 +62,36 @@ not repeat the reference procedure below just to reproduce this report.
 2. The final protected-database read-only hash/integrity check was requested from
    the user because sudo requires their password. Deployment-time full hashes
    passed; subsequent API comparisons cover all five existing actions/events.
-   Do not claim a second full database hash check until its output is received:
+   On November 19, the user reported that the temporary Dell helper had gone.
+   The original helper survived on the Mac. Its hashing format was retained in
+   a [read-only replacement](ops/phase4d1_audit_readonly.py), which has no baseline
+   creation, migration, restore, or write mode. It first requires the saved
+   `audit-before.json` to match the retained `miniai-v3.db`, then compares the
+   live database against those original hashes. Missing originals cause failure,
+   not creation of a substitute baseline.
+
+   The replacement was staged in a private persistent directory on the Dell;
+   local and staged SHA-256 both match:
+
+   ```text
+   5823986a721013ca3def4290bcb054106cfabe1b1cffcb2da21bac61a164b3b4
+   ```
+
+   Five focused local tests passed, including original hash-format compatibility,
+   unchanged files on a successful fixture check, historical-row tampering,
+   replacement-baseline rejection, and no creation of missing files. An
+   unprivileged Dell run failed closed at the protected baseline. Sudo still
+   requires the user's password. Do not claim the final database verification
+   passed until the privileged output is received:
 
    ```sh
-   ssh -t mini-server 'sudo python3 /tmp/miniai-phase4d1-87cd296/audit.py after'
+   ssh -t mini-server 'sudo /usr/bin/python3 -I -B /home/conradevans/phase4d1-verification/audit-readonly-5823986a7210.py'
    ```
+
+   The helper prints only integrity status, schema versions, baseline digest,
+   counts/deltas, and preservation results, not row contents or credentials.
+   No redeployment, service restart, database reset, historical-record recreation,
+   or repeat live mutation test occurred during this helper recovery.
 
 Ambiguity was intentionally not induced live: there is no safe deterministic
 production fixture, and disrupting MiniDeploy/networking would create needless

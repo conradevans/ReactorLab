@@ -4453,3 +4453,28 @@ Existing macOS/Linux portability debt remains recorded in `TESTING.md`.
 See `PRODUCTION_VERIFICATION.md` for evidence, fixture IDs, and remaining work.
 The authorized ceiling remains Phase 4D1. Phase 4D2 is proposed only after 4D1
 acceptance and fresh authorization; it has not started.
+
+## November 19: read-only audit helper recovery
+
+The user reported that `/tmp/miniai-phase4d1-87cd296/audit.py` no longer existed
+on the Dell. The original helper was found on the Mac. A read-only replacement
+is preserved in `ops/phase4d1_audit_readonly.py`, with five passing focused tests,
+and staged privately at:
+
+```text
+/home/conradevans/phase4d1-verification/audit-readonly-5823986a7210.py
+SHA-256: 5823986a721013ca3def4290bcb054106cfabe1b1cffcb2da21bac61a164b3b4
+```
+
+It retains the original row-hashing algorithm and requires both original
+protected files, `audit-before.json` and `miniai-v3.db`, under
+`/var/lib/miniai/phase4d1-87cd296`. It checks their agreement before comparing
+the current schema-v4 database. It cannot create a replacement baseline, restore
+data, migrate, or write records. Missing originals cause a failure.
+
+The staged checksum matched. An unprivileged run failed closed on baseline
+permissions; sudo requires the user's password. The privileged check was
+requested, and its result remains pending. The exact command is in
+`PRODUCTION_VERIFICATION.md`. No deployment, restart, database reset, historical
+record recreation, or repeated live mutation test was performed for this recovery.
+Phase 4D1 remains PARTIAL; Phase 4D2 has not started.
